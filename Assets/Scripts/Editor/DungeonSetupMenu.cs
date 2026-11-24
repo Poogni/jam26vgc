@@ -111,11 +111,13 @@ public static class DungeonSetupMenu
         EnsureFolder(TileFolder);
         var tiles = new Dictionary<char, TileDefinition>
         {
-            ['.'] = Tile("Floor", new Color(0.62f, 0.60f, 0.56f), TileDefinition.TileShape.Open),
-            ['#'] = Tile("Wall", new Color(0.36f, 0.33f, 0.30f), TileDefinition.TileShape.Solid),
+            ['.'] = Tile("Floor", new Color(0.72f, 0.60f, 0.46f), TileDefinition.TileShape.Open),
+            ['#'] = Tile("Wall", new Color(0.86f, 0.74f, 0.58f), TileDefinition.TileShape.Solid),
             ['D'] = Tile("Door", new Color(0.60f, 0.38f, 0.16f), TileDefinition.TileShape.Open),
             ['<'] = Tile("Stairs Up", new Color(0.30f, 0.62f, 1.00f), TileDefinition.TileShape.Open),
             ['>'] = Tile("Stairs Down", new Color(0.95f, 0.55f, 0.20f), TileDefinition.TileShape.Open),
+            ['C'] = Tile("Covered Passage", new Color(0.45f, 0.36f, 0.30f), TileDefinition.TileShape.Open, covered: true),
+            ['M'] = Tile("Minaret", new Color(0.92f, 0.86f, 0.72f), TileDefinition.TileShape.Solid, stories: 6),
         };
         AssetDatabase.SaveAssets();
         return tiles;
@@ -171,14 +173,15 @@ public static class DungeonSetupMenu
         return level;
     }
 
-    private static TileDefinition Tile(string label, Color color, TileDefinition.TileShape shape)
+    private static TileDefinition Tile(string label, Color color, TileDefinition.TileShape shape,
+        bool covered = false, int stories = 0)
     {
         string path = $"{TileFolder}/Tile_{label.Replace(" ", "")}.asset";
         var existing = AssetDatabase.LoadAssetAtPath<TileDefinition>(path);
         if (existing != null) return existing;
 
         var tile = ScriptableObject.CreateInstance<TileDefinition>();
-        tile.EditorSetup(label, color, shape);
+        tile.EditorSetup(label, color, shape, covered, stories);
         AssetDatabase.CreateAsset(tile, path);
         return tile;
     }

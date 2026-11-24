@@ -22,9 +22,9 @@ public class GridPlayerController : MonoBehaviour
     [SerializeField] private Ease turnEase = Ease.OutCubic;
 
     [Header("Collision")]
-    [Tooltip("When a level is loaded its tile matrix decides walkability. This physics probe is an extra check " +
-             "for props/obstacles placed in the scene. Turn off to trust the level data only.")]
-    [SerializeField] private bool usePhysicsProbe = true;
+    [Tooltip("When a level is loaded its tile matrix decides walkability. Turn this on to also raycast for " +
+             "props/obstacles placed by hand in the scene.")]
+    [SerializeField] private bool usePhysicsProbe;
     [Tooltip("Layers that block movement (walls, pillars, closed doors).")]
     [SerializeField] private LayerMask obstacleMask = ~0;
     [Tooltip("Height above the floor at which the wall probe is cast.")]
@@ -41,10 +41,11 @@ public class GridPlayerController : MonoBehaviour
 
     public Vector2Int Cell { get; private set; }
     public Facing Facing { get; private set; }
-    public bool IsBusy => _motion.isAlive;
+    public bool IsBusy => _motion.isAlive || _align.isAlive;
 
     private DungeonInputReader _input;
-    private Tween _motion;
+    private Tween _motion; // position / bump lock / turn
+    private Tween _align;  // re-aim along the warped street while stepping
     private LevelData _level;
 
     private void Awake()
@@ -53,7 +54,11 @@ public class GridPlayerController : MonoBehaviour
         Teleport(startCell, startFacing);
     }
 
-    private void OnDisable() => _motion.Complete();
+    private void OnDisable()
+    {
+        _motion.Complete();
+        _align.Complete();
+    }
 
     private void Update()
     {
@@ -74,10 +79,19 @@ public class GridPlayerController : MonoBehaviour
     public void Teleport(Vector2Int cell, Facing facing)
     {
         _motion.Stop();
+        _align.Stop();
         Cell = cell;
         Facing = facing;
-        transform.SetPositionAndRotation(DungeonGrid.CellToWorld(cell), facing.ToRotation());
+        transform.SetPositionAndRotation(CellPosition(cell), FacingRotation(cell, facing));
     }
+
+    /// <summary>World position of a cell: the warped center when a level is loaded, the plain grid otherwise.</summary>
+    public Vector3 CellPosition(Vector2Int cell) =>
+        _level != null ? _level.CellCenter(cell) : DungeonGrid.CellToWorld(cell);
+
+    /// <summary>Look rotation for a facing in a cell, following the warped street when a level is loaded.</summary>
+    public Quaternion FacingRotation(Vector2Int cell, Facing facing) =>
+        _level != null ? _level.FacingRotation(cell, facing) : facing.ToRotation();
 
     /// <summary>Use this level's tile matrix for walkability (set by <see cref="LevelBuilder"/>).</summary>
     public void SetLevel(LevelData level) => _level = level;
@@ -88,14 +102,15 @@ public class GridPlayerController : MonoBehaviour
         if (_level != null && !_level.IsWalkable(Cell + direction.ToOffset())) return false;
         if (!usePhysicsProbe) return true;
 
-        Vector3 origin = DungeonGrid.CellToWorld(Cell, probeHeight);
-        return !Physics.Raycast(origin, direction.ToWorldDirection(), DungeonGrid.CellSize,
-            obstacleMask, QueryTriggerInteraction.Ignore);
+        Vector3 from = CellPosition(Cell) + Vector3.up * probeHeight;
+        Vector3 to = CellPosition(Cell + direction.ToOffset()) + Vector3.up * probeHeight;
+        return !Physics.Linecast(from, to, obstacleMask, QueryTriggerInteraction.Ignore);
     }
 
     private void TryStep(Facing direction)
     {
-        Vector3 worldDir = direction.ToWorldDirection();
+        Vector3 from = CellPosition(Cell);
+        Vector3 worldDir = (CellPosition(Cell + direction.ToOffset()) - from).normalized;
 
         if (!CanStep(direction))
         {
@@ -105,14 +120,16 @@ public class GridPlayerController : MonoBehaviour
         }
 
         Cell += direction.ToOffset();
-        _motion = Tween.Position(transform, DungeonGrid.CellToWorld(Cell), stepDuration, stepEase);
+        _motion = Tween.Position(transform, CellPosition(Cell), stepDuration, stepEase);
+        // Cells are irregular, so "north" points a little differently in the new cell: re-aim while walking.
+        _align = Tween.Rotation(transform, FacingRotation(Cell, Facing), stepDuration, stepEase);
         Stepped?.Invoke(worldDir, stepDuration);
     }
 
     private void Turn(int sign)
     {
         Facing = Facing.Rotate(sign);
-        _motion = Tween.Rotation(transform, Facing.ToRotation(), turnDuration, turnEase);
+        _motion = Tween.Rotation(transform, FacingRotation(Cell, Facing), turnDuration, turnEase);
         Turned?.Invoke(sign, turnDuration);
     }
 

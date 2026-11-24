@@ -13,9 +13,10 @@ MonoBehaviour:
   m_Name: Tile_Wall
   m_EditorClassIdentifier: Assembly-CSharp::TileDefinition
   displayName: Wall
-  editorColor: {r: 0.36, g: 0.33, b: 0.3, a: 1}
+  editorColor: {r: 0.86, g: 0.74, b: 0.58, a: 1}
   shape: 1
   blocksMovement: 0
   prefab: {fileID: 0}
   hasFloor: 1
-  hasCeiling: 1
+  covered: 0
+  storiesOverride: 0

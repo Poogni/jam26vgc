@@ -9,9 +9,9 @@ public class TileDefinition : ScriptableObject
 {
     public enum TileShape
     {
-        /// <summary>A room/corridor cell: gets floor + ceiling, can be walked on.</summary>
+        /// <summary>A street/courtyard cell: gets ground, can be walked on.</summary>
         Open,
-        /// <summary>A filled cell: rendered as a wall block, never walkable.</summary>
+        /// <summary>A building: extruded to its height, never walkable.</summary>
         Solid,
     }
 
@@ -23,18 +23,21 @@ public class TileDefinition : ScriptableObject
 
     [SerializeField] private TileShape shape = TileShape.Open;
 
-    [Tooltip("Open tiles only: the cell has a floor/ceiling but the player can't enter it (statue, fountain...).")]
+    [Tooltip("Open tiles only: the cell has ground but the player can't enter it (statue, fountain...).")]
     [SerializeField] private bool blocksMovement;
 
-    [Tooltip("Optional.\nOpen: spawned at the cell center on top of the floor (door frame, stairs, prop).\n" +
-             "Solid: replaces the level's default wall block. Pivot = floor center of the cell.")]
+    [Tooltip("Optional prop spawned at the cell center on the ground (door frame, stairs, fountain, stall...). " +
+             "It faces the cell's north edge. For solid tiles it sits at the building's base.")]
     [SerializeField] private GameObject prefab;
 
-    [Tooltip("Open tiles only: spawn the level's floor in this cell.")]
+    [Tooltip("Open tiles only: generate ground in this cell.")]
     [SerializeField] private bool hasFloor = true;
 
-    [Tooltip("Open tiles only: spawn the level's ceiling in this cell.")]
-    [SerializeField] private bool hasCeiling = true;
+    [Tooltip("Open tiles only: put a roof over this cell (covered passage / souk). Open sky otherwise.")]
+    [SerializeField] private bool covered;
+
+    [Tooltip("Solid tiles only: building height in stories. 0 = use the level's random min..max.")]
+    [SerializeField, Min(0)] private int storiesOverride;
 
     public string Label => string.IsNullOrEmpty(displayName) ? name : displayName;
     public Color EditorColor => editorColor;
@@ -43,16 +46,19 @@ public class TileDefinition : ScriptableObject
     public bool IsWalkable => shape == TileShape.Open && !blocksMovement;
     public GameObject Prefab => prefab;
     public bool HasFloor => hasFloor;
-    public bool HasCeiling => hasCeiling;
+    public bool Covered => covered;
+    public int StoriesOverride => storiesOverride;
 
 #if UNITY_EDITOR
     /// <summary>Editor helper used when generating starter tiles.</summary>
-    public void EditorSetup(string label, Color color, TileShape tileShape, bool blocks = false)
+    public void EditorSetup(string label, Color color, TileShape tileShape, bool isCovered = false, int stories = 0)
     {
+        covered = isCovered;
+        storiesOverride = stories;
         displayName = label;
         editorColor = color;
         shape = tileShape;
-        blocksMovement = blocks;
+        blocksMovement = false;
     }
 #endif
 }

@@ -81,13 +81,38 @@ public class LevelDataEditor : Editor
     private void DrawSettings()
     {
         serializedObject.Update();
-        EditorGUILayout.LabelField("Look", EditorStyles.boldLabel);
         EditorGUI.BeginChangeCheck();
-        EditorGUILayout.PropertyField(serializedObject.FindProperty("wallHeight"));
-        EditorGUILayout.PropertyField(serializedObject.FindProperty("hasCeiling"));
-        EditorGUILayout.PropertyField(serializedObject.FindProperty("wallPrefab"));
-        EditorGUILayout.PropertyField(serializedObject.FindProperty("floorPrefab"));
-        EditorGUILayout.PropertyField(serializedObject.FindProperty("ceilingPrefab"));
+
+        EditorGUILayout.LabelField("Irregular Grid", EditorStyles.boldLabel);
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("jitter"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("bend"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("bendScale"));
+        using (new EditorGUILayout.HorizontalScope())
+        {
+            SerializedProperty seed = serializedObject.FindProperty("seed");
+            EditorGUILayout.PropertyField(seed);
+            if (GUILayout.Button("New", GUILayout.Width(50))) seed.intValue = Random.Range(1, 99999);
+        }
+
+        EditorGUILayout.Space(4);
+        EditorGUILayout.LabelField("Buildings", EditorStyles.boldLabel);
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("storyHeight"));
+        using (new EditorGUILayout.HorizontalScope())
+        {
+            EditorGUILayout.PrefixLabel("Stories (min / max)");
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("minStories"), GUIContent.none);
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("maxStories"), GUIContent.none);
+        }
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("heightClusterSize"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("heightRandomness"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("roofJitter"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("coveredHeight"));
+
+        EditorGUILayout.Space(4);
+        EditorGUILayout.LabelField("Materials", EditorStyles.boldLabel);
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("groundMaterial"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("wallMaterial"));
+
         bool changed = EditorGUI.EndChangeCheck();
         serializedObject.ApplyModifiedProperties();
         if (changed) LevelPreview.Rebuild(Level);
