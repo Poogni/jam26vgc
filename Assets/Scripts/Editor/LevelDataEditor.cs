@@ -10,9 +10,9 @@ using UnityEngine;
 [CustomEditor(typeof(LevelData))]
 public class LevelDataEditor : Editor
 {
-    private enum PaintTool { Brush, Rectangle, Fill, PlayerStart }
+    private enum PaintTool { Brush, Rectangle, Fill, PlayerStart, Inspect }
 
-    private static readonly string[] ToolNames = { "Brush", "Rectangle", "Fill", "Player Start" };
+    private static readonly string[] ToolNames = { "Brush", "Rectangle", "Fill", "Player Start", "Inspect" };
     private static readonly Color RockColor = new Color(0.12f, 0.12f, 0.13f);
     private static readonly Color GridLineColor = new Color(0.05f, 0.05f, 0.05f);
     private static readonly Color SelectedColor = new Color(0.25f, 0.5f, 0.95f);
@@ -203,7 +203,7 @@ public class LevelDataEditor : Editor
     {
         _brushIsRock = tile == null;
         _brush = tile;
-        if (_tool == PaintTool.PlayerStart) _tool = PaintTool.Brush;
+        if (_tool == PaintTool.PlayerStart || _tool == PaintTool.Inspect) _tool = PaintTool.Brush;
         GUI.FocusControl(null);
     }
 
@@ -246,6 +246,7 @@ public class LevelDataEditor : Editor
             PaintTool.Brush => "Left-drag: paint   •   Right-drag: erase to rock",
             PaintTool.Rectangle => "Left-drag: fill a rectangle   •   Right-drag: erase a rectangle",
             PaintTool.Fill => "Left-click: flood fill   •   Right-click: flood erase",
+            PaintTool.Inspect => "Click a cell to select it without painting; its details (e.g. teleport link) show below",
             _ => "Click a cell to place the start. Click it again to rotate the facing.",
         };
         EditorGUILayout.LabelField(help, EditorStyles.centeredGreyMiniLabel);
@@ -314,6 +315,8 @@ public class LevelDataEditor : Editor
                     case PaintTool.Fill:
                         _strokeChanged |= FloodFill(cell, StrokeTile);
                         break;
+                    case PaintTool.Inspect:
+                        break; // selection only (the Selected Cell panel below the grid)
                     case PaintTool.PlayerStart:
                         if (!_strokeErase)
                         {
@@ -420,6 +423,23 @@ public class LevelDataEditor : Editor
                     : new Color(1f, 1f, 1f, 0.6f);
                 GUI.Label(inner, tile.Label.Substring(0, 1).ToUpperInvariant(), letterStyle);
             }
+
+            if (tile != null) DrawBehaviorMarker(inner, tile);
+        }
+
+        // Selected cell, and the teleport it links to.
+        if (_lastCell.HasValue && level.InBounds(_lastCell.Value))
+        {
+            Rect sel = CellRect(area, cs, _lastCell.Value);
+            DrawOutline(sel, Color.white);
+            DrawOutline(new Rect(sel.x + 1, sel.y + 1, sel.width - 2, sel.height - 2), Color.black);
+
+            Vector2Int? partner = level.FindTeleportPartner(_lastCell.Value);
+            if (partner.HasValue)
+            {
+                Handles.color = TeleportColor;
+                Handles.DrawAAPolyLine(3f, sel.center, CellRect(area, cs, partner.Value).center);
+            }
         }
 
         // Rectangle preview.
@@ -446,6 +466,37 @@ public class LevelDataEditor : Editor
 
         // North marker.
         GUI.Label(new Rect(area.xMax - 20, area.y - 16, 20, 16), "N ↑", EditorStyles.miniBoldLabel);
+    }
+
+    private static readonly Color TeleportColor = new Color(0.25f, 0.55f, 1f);
+    private static readonly Color FakeWallLine = new Color(0.9f, 0.1f, 0.15f);
+
+    /// <summary>Map legend: blue circle = teleport, red hatching + line = fake wall.</summary>
+    private static void DrawBehaviorMarker(Rect r, TileDefinition tile)
+    {
+        Vector3 center = r.center;
+        float radius = r.width * 0.28f;
+        switch (tile.Behavior)
+        {
+            case TileDefinition.TileBehavior.Teleport:
+                Handles.color = TeleportColor;
+                Handles.DrawWireDisc(center, Vector3.forward, radius + 1f, Mathf.Max(2f, r.width * 0.12f));
+                break;
+
+            case TileDefinition.TileBehavior.FakeWall:
+                Handles.color = new Color(FakeWallLine.r, FakeWallLine.g, FakeWallLine.b, 0.7f);
+                // Diagonal hatching clipped to the cell.
+                for (float k = 0.25f; k < 2f; k += 0.25f)
+                {
+                    Vector2 a = k <= 1f ? new Vector2(r.x, r.y + r.height * k) : new Vector2(r.x + r.width * (k - 1f), r.yMax);
+                    Vector2 b = k <= 1f ? new Vector2(r.x + r.width * k, r.y) : new Vector2(r.xMax, r.y + r.height * (k - 1f));
+                    Handles.DrawAAPolyLine(1.5f, a, b);
+                }
+                // Red line along the top edge.
+                Handles.color = FakeWallLine;
+                Handles.DrawAAPolyLine(3f, new Vector2(r.x, r.y + 1.5f), new Vector2(r.xMax, r.y + 1.5f));
+                break;
+        }
     }
 
     private static void DrawStartArrow(Rect cell, Facing facing)
@@ -487,10 +538,9 @@ public class LevelDataEditor : Editor
     {
         LevelData level = Level;
 
-        string hover = _lastCell.HasValue && level.InBounds(_lastCell.Value)
-            ? $"Last cell: ({_lastCell.Value.x}, {_lastCell.Value.y})  {(level.GetTile(_lastCell.Value)?.Label ?? "Rock")}"
-            : " ";
-        EditorGUILayout.LabelField(hover, EditorStyles.miniLabel);
+        DrawSelectedCell(level);
+        DrawMechanicWarnings(level);
+
         EditorGUILayout.LabelField(
             $"Player start: ({level.PlayerStart.x}, {level.PlayerStart.y}) facing {level.StartFacing}",
             EditorStyles.miniLabel);
@@ -517,6 +567,55 @@ public class LevelDataEditor : Editor
         }
 
         if (GUILayout.Button("Rebuild Scene Preview")) LevelPreview.Rebuild(level, force: true);
+    }
+
+    // ------------------------------------------------------------------ selected cell
+
+    private void DrawSelectedCell(LevelData level)
+    {
+        EditorGUILayout.Space(4);
+        EditorGUILayout.LabelField("Selected Cell", EditorStyles.boldLabel);
+        if (!_lastCell.HasValue || !level.InBounds(_lastCell.Value))
+        {
+            EditorGUILayout.LabelField("Click a cell (any tool, or Inspect to select without painting).", EditorStyles.miniLabel);
+            return;
+        }
+
+        Vector2Int cell = _lastCell.Value;
+        TileDefinition tile = level.GetTile(cell);
+        EditorGUILayout.LabelField($"({cell.x}, {cell.y})  {(tile != null ? tile.Label : "Rock")}");
+        if (tile == null) return;
+
+        switch (tile.Behavior)
+        {
+            case TileDefinition.TileBehavior.Teleport:
+            {
+                Vector2Int? partner = level.FindTeleportPartner(cell);
+                if (partner.HasValue)
+                    EditorGUILayout.LabelField($"Sends the player to ({partner.Value.x}, {partner.Value.y}), keeping their facing.");
+                else
+                    EditorGUILayout.HelpBox("No partner: place another Teleport tile in the same row (or column).", MessageType.Warning);
+                break;
+            }
+
+            case TileDefinition.TileBehavior.FakeWall:
+                EditorGUILayout.LabelField("Looks like a wall, but the player walks straight through.", EditorStyles.miniLabel);
+                break;
+        }
+    }
+
+    private static void DrawMechanicWarnings(LevelData level)
+    {
+        int lonelyTeleports = 0;
+        for (int y = 0; y < level.Height; y++)
+        for (int x = 0; x < level.Width; x++)
+        {
+            var c = new Vector2Int(x, y);
+            if (level.BehaviorAt(c) == TileDefinition.TileBehavior.Teleport && !level.FindTeleportPartner(c).HasValue)
+                lonelyTeleports++;
+        }
+        if (lonelyTeleports > 0)
+            EditorGUILayout.HelpBox($"{lonelyTeleports} teleport tile(s) have no partner in their row or column.", MessageType.Warning);
     }
 
     private void Commit()

@@ -16,6 +16,7 @@ public class LevelBuilder : MonoBehaviour
     private const string RootName = "[Generated Level]";
     private static readonly Color RockColor = new Color(0.78f, 0.66f, 0.52f); // sun-baked plaster
     private static readonly Color RoofColor = new Color(0.55f, 0.40f, 0.28f);
+    private static readonly Color GroundFallbackColor = new Color(0.72f, 0.60f, 0.46f);
 
     [SerializeField] private LevelData level;
     [Tooltip("Player to place on the level's start cell. Found automatically if empty.")]
@@ -65,6 +66,8 @@ public class LevelBuilder : MonoBehaviour
         var walls = new Dictionary<TileDefinition, MeshBuilder>();
         MeshBuilder rockWalls = new MeshBuilder();
         MeshBuilder roofs = new MeshBuilder();
+        var fakeWalls = new Dictionary<TileDefinition, MeshBuilder>();
+        MeshBuilder hiddenGround = new MeshBuilder(); // ground inside fake walls
 
         var q = new Vector3[4];
 
@@ -87,14 +90,19 @@ public class LevelBuilder : MonoBehaviour
             }
             else if (IsExtruded(c))
             {
-                MeshBuilder mb = tile != null ? Get(walls, tile) : rockWalls;
+                bool fake = tile != null && tile.IsFakeWall;
+                MeshBuilder mb = fake ? Get(fakeWalls, tile) : tile != null ? Get(walls, tile) : rockWalls;
+                if (fake) hiddenGround.Floor(q, 0f, up: true);
                 float h = level.BuildingHeight(c);
 
                 // Sides: only the part that sticks out above the neighbor (open ground = 0).
                 for (int side = 0; side < 4; side++)
                 {
                     Vector2Int n = c + ((Facing)side).ToOffset();
-                    float bottom = level.IsOpen(n) ? 0f : (IsExtruded(n) ? level.BuildingHeight(n) : 0f);
+                    // Fake walls count as open space for their neighbours, so walking inside one shows
+                    // full walls around you instead of a gap.
+                    bool nOpen = level.IsOpen(n) || level.IsFakeWall(n);
+                    float bottom = nOpen ? 0f : (IsExtruded(n) ? level.BuildingHeight(n) : 0f);
                     if (bottom >= h) continue;
                     // Edge corners in CCW order so the face points outward.
                     (Vector3 a, Vector3 b) = side switch
@@ -117,6 +125,15 @@ public class LevelBuilder : MonoBehaviour
         foreach (var kv in walls) Emit(root, $"Buildings - {kv.Key.Label}", kv.Value, level.WallMaterial, kv.Key.EditorColor);
         Emit(root, "Buildings - Rock", rockWalls, level.WallMaterial, RockColor);
         Emit(root, "Covered Roofs", roofs, level.WallMaterial, RoofColor);
+        Emit(root, "Ground - Under Fake Walls", hiddenGround, level.GroundMaterial, GroundFallbackColor);
+        foreach (var kv in fakeWalls)
+        {
+            // Rendered like the wall it imitates, slightly tinted, and with no collider.
+            TileDefinition disguise = kv.Key.DisguiseAs;
+            Color look = (disguise != null ? disguise.EditorColor : RockColor) * kv.Key.DisguiseTint;
+            if (level.WallMaterial != null) look = kv.Key.DisguiseTint; // tint the texture only
+            Emit(root, $"Fake Walls - {kv.Key.Label}", kv.Value, level.WallMaterial, look, collider: false, alwaysTint: true);
+        }
 
 #if UNITY_EDITOR
         if (!Application.isPlaying)
@@ -166,7 +183,8 @@ public class LevelBuilder : MonoBehaviour
         return mb;
     }
 
-    private static void Emit(Transform root, string objectName, MeshBuilder mb, Material material, Color tint)
+    private static void Emit(Transform root, string objectName, MeshBuilder mb, Material material, Color tint,
+        bool collider = true, bool alwaysTint = false)
     {
         if (mb.IsEmpty) return;
 
@@ -177,8 +195,8 @@ public class LevelBuilder : MonoBehaviour
         Mesh mesh = mb.ToMesh("Generated " + objectName);
         go.AddComponent<MeshFilter>().sharedMesh = mesh;
         go.AddComponent<MeshRenderer>().sharedMaterial = material != null ? material : FallbackMaterial;
-        go.AddComponent<MeshCollider>().sharedMesh = mesh;
-        if (material == null) go.AddComponent<PlaceholderTint>().Color = tint;
+        if (collider) go.AddComponent<MeshCollider>().sharedMesh = mesh;
+        if (material == null || alwaysTint) go.AddComponent<PlaceholderTint>().Color = tint;
     }
 
     private void SpawnProp(TileDefinition tile, Vector2Int c, Transform root)

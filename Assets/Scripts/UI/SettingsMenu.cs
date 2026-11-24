@@ -51,6 +51,7 @@ public class SettingsMenu : MonoBehaviour
     {
         _menuAction?.Disable();
         GameSettings.Changed -= ApplySettings;
+        GameInputLock.Unlock(this);
     }
 
     private void OnDestroy() => _menuAction?.Dispose();
@@ -67,7 +68,7 @@ public class SettingsMenu : MonoBehaviour
     public void Open()
     {
         overlay.SetActive(true);
-        SetPlayerInput(false);
+        GameInputLock.Lock(this);
         // Keyboard / gamepad navigation starts on the first option.
         if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(crtToggle.gameObject);
     }
@@ -75,14 +76,8 @@ public class SettingsMenu : MonoBehaviour
     public void Close()
     {
         overlay.SetActive(false);
-        SetPlayerInput(true);
+        GameInputLock.Unlock(this);
         if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
-    }
-
-    private static void SetPlayerInput(bool enabled)
-    {
-        foreach (DungeonInputReader reader in FindObjectsByType<DungeonInputReader>(FindObjectsSortMode.None))
-            reader.enabled = enabled;
     }
 
     private void ApplySettings()

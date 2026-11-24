@@ -74,6 +74,47 @@ public class LevelData : ScriptableObject
         return t != null && t.IsWalkable;
     }
 
+    public bool IsFakeWall(Vector2Int c)
+    {
+        TileDefinition t = GetTile(c);
+        return t != null && t.IsFakeWall;
+    }
+
+    public TileDefinition.TileBehavior BehaviorAt(Vector2Int c)
+    {
+        TileDefinition t = GetTile(c);
+        return t != null ? t.Behavior : TileDefinition.TileBehavior.None;
+    }
+
+    // ---------------------------------------------------------------- teleports
+
+    /// <summary>
+    /// Where a teleport cell sends you: the farthest other teleport in the same row (wrap-around east/west),
+    /// otherwise the farthest in the same column (north/south). Null if it has no partner.
+    /// </summary>
+    public Vector2Int? FindTeleportPartner(Vector2Int c)
+    {
+        if (BehaviorAt(c) != TileDefinition.TileBehavior.Teleport) return null;
+
+        Vector2Int? best = null;
+        int bestDist = 0;
+        for (int x = 0; x < width; x++)
+        {
+            var o = new Vector2Int(x, c.y);
+            int d = Mathf.Abs(x - c.x);
+            if (d > bestDist && BehaviorAt(o) == TileDefinition.TileBehavior.Teleport) { best = o; bestDist = d; }
+        }
+        if (best.HasValue) return best;
+
+        for (int y = 0; y < height; y++)
+        {
+            var o = new Vector2Int(c.x, y);
+            int d = Mathf.Abs(y - c.y);
+            if (d > bestDist && BehaviorAt(o) == TileDefinition.TileBehavior.Teleport) { best = o; bestDist = d; }
+        }
+        return best;
+    }
+
     // ---------------------------------------------------------------- world shape
 
     /// <summary>

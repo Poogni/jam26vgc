@@ -5,11 +5,11 @@ using UnityEngine.UI;
 /// <summary>Builds the settings overlay + tool bar button inside the existing GameUI canvas.</summary>
 public static class SettingsMenuBuilder
 {
-    private static readonly Color Dim = new Color(0f, 0f, 0f, 0.6f);
-    private static readonly Color PanelColor = new Color(0.10f, 0.08f, 0.06f, 0.97f);
-    private static readonly Color Sand = new Color(0.93f, 0.84f, 0.68f);
-    private static readonly Color ButtonColor = new Color(0.25f, 0.19f, 0.13f);
-    private static readonly Color BoxColor = new Color(0.20f, 0.16f, 0.12f);
+    internal static readonly Color Dim = new Color(0f, 0f, 0f, 0.6f);
+    internal static readonly Color PanelColor = new Color(0.10f, 0.08f, 0.06f, 0.97f);
+    internal static readonly Color Sand = new Color(0.93f, 0.84f, 0.68f);
+    internal static readonly Color ButtonColor = new Color(0.25f, 0.19f, 0.13f);
+    internal static readonly Color BoxColor = new Color(0.20f, 0.16f, 0.12f);
 
     [MenuItem("Tools/Dungeon/Create Settings Menu", priority = 61)]
     public static void Create()
@@ -139,7 +139,7 @@ public static class SettingsMenuBuilder
         return toggle;
     }
 
-    private static Button CreateButton(Transform parent, Font font, string label, Vector2 size)
+    internal static Button CreateButton(Transform parent, Font font, string label, Vector2 size)
     {
         RectTransform rt = Rect(label + " Button", parent);
         rt.sizeDelta = size;
@@ -182,7 +182,7 @@ public static class SettingsMenuBuilder
         return Object.FindAnyObjectByType<Canvas>();
     }
 
-    private static RectTransform Rect(string name, Transform parent)
+    internal static RectTransform Rect(string name, Transform parent)
     {
         var go = new GameObject(name, typeof(RectTransform));
         Undo.RegisterCreatedObjectUndo(go, "Create Settings Menu");
@@ -191,7 +191,7 @@ public static class SettingsMenuBuilder
         return (RectTransform)go.transform;
     }
 
-    private static void Stretch(RectTransform rt, float inset = 0f)
+    internal static void Stretch(RectTransform rt, float inset = 0f)
     {
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
@@ -211,21 +211,21 @@ public static class SettingsMenuBuilder
         rt.anchoredPosition = new Vector2(0, -top);
     }
 
-    private static Image AddImage(RectTransform rt, Color color)
+    internal static Image AddImage(RectTransform rt, Color color)
     {
         var img = rt.gameObject.AddComponent<Image>();
         img.color = color;
         return img;
     }
 
-    private static void AddOutline(GameObject go, Color color)
+    internal static void AddOutline(GameObject go, Color color)
     {
         var outline = go.AddComponent<Outline>();
         outline.effectColor = color;
         outline.effectDistance = new Vector2(2, -2);
     }
 
-    private static Text AddText(RectTransform rt, Font font, string value, int size, TextAnchor anchor)
+    internal static Text AddText(RectTransform rt, Font font, string value, int size, TextAnchor anchor)
     {
         var text = rt.gameObject.AddComponent<Text>();
         text.font = font;

@@ -38,6 +38,13 @@ public class GridPlayerController : MonoBehaviour
     public event Action<int, float> Turned;
     /// <summary>Raised when a step is blocked: world direction of the attempted step.</summary>
     public event Action<Vector3> Bumped;
+    /// <summary>Raised after a teleport tile moved the player: from cell, to cell.</summary>
+    public event Action<Vector2Int, Vector2Int> Teleported;
+
+    /// <summary>The level the player is walking in (null before a LevelBuilder assigns one).</summary>
+    public LevelData Level => _level;
+    /// <summary>The cell directly in front of the player.</summary>
+    public Vector2Int FacingCell => Cell + Facing.ToOffset();
 
     public Vector2Int Cell { get; private set; }
     public Facing Facing { get; private set; }
@@ -120,10 +127,27 @@ public class GridPlayerController : MonoBehaviour
         }
 
         Cell += direction.ToOffset();
-        _motion = Tween.Position(transform, CellPosition(Cell), stepDuration, stepEase);
+        _motion = Tween.Position(transform, CellPosition(Cell), stepDuration, stepEase)
+            .OnComplete(this, p => p.OnStepFinished());
         // Cells are irregular, so "north" points a little differently in the new cell: re-aim while walking.
-        _align = Tween.Rotation(transform, FacingRotation(Cell, Facing), stepDuration, stepEase);
+        Quaternion aim = FacingRotation(Cell, Facing);
+        if (Quaternion.Angle(transform.rotation, aim) > 0.01f)
+            _align = Tween.Rotation(transform, aim, stepDuration, stepEase);
         Stepped?.Invoke(worldDir, stepDuration);
+    }
+
+    /// <summary>Landing on a teleport tile jumps to its partner, keeping facing (held keys keep walking).</summary>
+    private void OnStepFinished()
+    {
+        if (_level == null || _level.BehaviorAt(Cell) != TileDefinition.TileBehavior.Teleport) return;
+        Vector2Int? partner = _level.FindTeleportPartner(Cell);
+        if (!partner.HasValue) return;
+
+        Vector2Int from = Cell;
+        _align.Stop();
+        Cell = partner.Value;
+        transform.SetPositionAndRotation(CellPosition(Cell), FacingRotation(Cell, Facing));
+        Teleported?.Invoke(from, Cell);
     }
 
     private void Turn(int sign)

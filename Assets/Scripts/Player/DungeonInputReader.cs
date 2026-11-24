@@ -92,6 +92,12 @@ public class DungeonInputReader : MonoBehaviour
     /// </summary>
     public GridCommand Consume()
     {
+        if (GameInputLock.IsLocked)
+        {
+            _buffered = GridCommand.None; // don't replay presses made while a menu was open
+            return GridCommand.None;
+        }
+
         if (_buffered != GridCommand.None)
         {
             GridCommand cmd = _buffered;

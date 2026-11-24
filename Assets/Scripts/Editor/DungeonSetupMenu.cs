@@ -118,7 +118,12 @@ public static class DungeonSetupMenu
             ['>'] = Tile("Stairs Down", new Color(0.95f, 0.55f, 0.20f), TileDefinition.TileShape.Open),
             ['C'] = Tile("Covered Passage", new Color(0.45f, 0.36f, 0.30f), TileDefinition.TileShape.Open, covered: true),
             ['M'] = Tile("Minaret", new Color(0.92f, 0.86f, 0.72f), TileDefinition.TileShape.Solid, stories: 6),
+            ['T'] = Tile("Teleport", new Color(0.62f, 0.55f, 0.44f), TileDefinition.TileShape.Open,
+                behavior: TileDefinition.TileBehavior.Teleport),
         };
+        // Fake wall imitates the plain wall tile.
+        tiles['F'] = Tile("Fake Wall", new Color(1.00f, 0.62f, 0.70f), TileDefinition.TileShape.Solid,
+            behavior: TileDefinition.TileBehavior.FakeWall, disguise: tiles['#']);
         AssetDatabase.SaveAssets();
         return tiles;
     }
@@ -174,14 +179,15 @@ public static class DungeonSetupMenu
     }
 
     private static TileDefinition Tile(string label, Color color, TileDefinition.TileShape shape,
-        bool covered = false, int stories = 0)
+        bool covered = false, int stories = 0, TileDefinition.TileBehavior behavior = TileDefinition.TileBehavior.None,
+        bool blocks = false, TileDefinition disguise = null)
     {
         string path = $"{TileFolder}/Tile_{label.Replace(" ", "")}.asset";
         var existing = AssetDatabase.LoadAssetAtPath<TileDefinition>(path);
         if (existing != null) return existing;
 
         var tile = ScriptableObject.CreateInstance<TileDefinition>();
-        tile.EditorSetup(label, color, shape, covered, stories);
+        tile.EditorSetup(label, color, shape, covered, stories, behavior, blocks, disguise);
         AssetDatabase.CreateAsset(tile, path);
         return tile;
     }
