@@ -512,5 +512,5 @@ MonoBehaviour:
   heightRandomness: 0.25
   roofJitter: 0.35
   coveredHeight: 3.2
-  groundMaterial: {fileID: 0}
+  groundMaterial: {fileID: 2100000, guid: d6377b73c4729b04f8b8040e116333f1, type: 2}
   wallMaterial: {fileID: 0}

@@ -37,6 +37,10 @@ public class RetroViewport : MonoBehaviour
     [SerializeField, Range(0f, 1f)] private float brightTrailBias = 0.3f;
     [SerializeField] private Shader persistenceShader;
 
+    [Header("CRT")]
+    [Tooltip("CRT material for the RawImage. Picked up automatically from the RawImage if it already uses a CRT shader.")]
+    [SerializeField] private Material crtMaterial;
+
     /// <summary>How many screen pixels one game pixel covers.</summary>
     public int PixelScale { get; private set; } = 1;
     /// <summary>Current render resolution of the 3D view.</summary>
@@ -63,9 +67,42 @@ public class RetroViewport : MonoBehaviour
 
     private void Reset() => persistenceShader = Shader.Find("Hidden/Retro/PhosphorPersistence");
 
+    /// <summary>Runtime switch for the CRT filter (settings menu). Off = plain pixelated image.</summary>
+    public bool CrtEnabled
+    {
+        get => _image != null && crtMaterial != null && _image.material == crtMaterial;
+        set
+        {
+            if (_image == null) _image = GetComponent<RawImage>();
+            CaptureCrtMaterial();
+            _image.material = value ? crtMaterial : null; // null = default UI material
+        }
+    }
+
+    /// <summary>Runtime switch for phosphor persistence / motion trails (settings menu).</summary>
+    public bool PersistenceEnabled
+    {
+        get => persistence;
+        set
+        {
+            if (persistence == value) return;
+            persistence = value;
+            _historyValid = false; // don't blend with a stale frame when switching back on
+        }
+    }
+
+    private void CaptureCrtMaterial()
+    {
+        if (crtMaterial != null || _image == null) return;
+        Material current = _image.material;
+        if (current != null && current.shader != null && current.shader.name.StartsWith("Retro/CRT"))
+            crtMaterial = current;
+    }
+
     private void OnEnable()
     {
         _image = GetComponent<RawImage>();
+        CaptureCrtMaterial();
         _lastScreenSize = Vector2Int.zero; // force a rebuild
         RenderPipelineManager.endCameraRendering += OnEndCameraRendering;
         Refresh();
