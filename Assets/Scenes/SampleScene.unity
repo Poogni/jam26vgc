@@ -14,12 +14,12 @@ OcclusionCullingSettings:
 RenderSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 10
-  m_Fog: 0
-  m_FogColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}
-  m_FogMode: 3
-  m_FogDensity: 0.01
-  m_LinearFogStart: 0
-  m_LinearFogEnd: 300
+  m_Fog: 1
+  m_FogColor: {r: 0.509434, g: 0.40405694, b: 0.252314, a: 1}
+  m_FogMode: 2
+  m_FogDensity: 0.206
+  m_LinearFogStart: 5
+  m_LinearFogEnd: 25
   m_AmbientSkyColor: {r: 0.212, g: 0.227, b: 0.259, a: 1}
   m_AmbientEquatorColor: {r: 0.114, g: 0.125, b: 0.133, a: 1}
   m_AmbientGroundColor: {r: 0.047, g: 0.043, b: 0.035, a: 1}
@@ -690,6 +690,7 @@ GameObject:
   - component: {fileID: 455266501}
   - component: {fileID: 455266500}
   - component: {fileID: 455266502}
+  - component: {fileID: 455266503}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -729,21 +730,21 @@ Camera:
   m_GameObject: {fileID: 455266498}
   m_Enabled: 1
   serializedVersion: 2
-  m_ClearFlags: 1
-  m_BackGroundColor: {r: 0.19215687, g: 0.3019608, b: 0.4745098, a: 0}
-  m_projectionMatrixMode: 1
+  m_ClearFlags: 2
+  m_BackGroundColor: {r: 0.509434, g: 0.40405694, b: 0.252314, a: 1}
+  m_projectionMatrixMode: 2
   m_GateFitMode: 2
   m_FOVAxisMode: 0
   m_Iso: 200
   m_ShutterSpeed: 0.005
   m_Aperture: 16
   m_FocusDistance: 10
-  m_FocalLength: 50
+  m_FocalLength: 14.055735
   m_BladeCount: 5
   m_Curvature: {x: 2, y: 11}
   m_BarrelClipping: 0.25
   m_Anamorphism: 0
-  m_SensorSize: {x: 36, y: 24}
+  m_SensorSize: {x: 21.946, y: 16.002}
   m_LensShift: {x: 0, y: 0}
   m_NormalizedViewPortRect:
     serializedVersion: 2
@@ -753,7 +754,7 @@ Camera:
     height: 1
   near clip plane: 0.05
   far clip plane: 1000
-  field of view: 75
+  field of view: 59.299995
   orthographic: 0
   orthographic size: 5
   m_Depth: 0
@@ -815,6 +816,29 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
+--- !u!114 &455266503
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 455266498}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 906e4b246d14a90439dc424f594f4e6c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DistanceFog
+  fogColor: {r: 0.509434, g: 0.40405694, b: 0.252314, a: 1}
+  mode: 2
+  startDistance: 5
+  endDistance: 25
+  density: 0.206
+  skyMatchesFog: 1
+  clipAtFogEnd: 1
+  _originalClear: 1
+  _originalBackground: {r: 0.19215687, g: 0.3019608, b: 0.4745098, a: 0}
+  _originalFar: 1000
+  _saved: 1
 --- !u!43 &501682463
 Mesh:
   m_ObjectHideFlags: 0
@@ -2133,12 +2157,12 @@ Camera:
   m_ShutterSpeed: 0.005
   m_Aperture: 16
   m_FocusDistance: 10
-  m_FocalLength: 50
+  m_FocalLength: 20.78461
   m_BladeCount: 5
   m_Curvature: {x: 2, y: 11}
   m_BarrelClipping: 0.25
   m_Anamorphism: 0
-  m_SensorSize: {x: 36, y: 24}
+  m_SensorSize: {x: 5.79, y: 4.01}
   m_LensShift: {x: 0, y: 0}
   m_NormalizedViewPortRect:
     serializedVersion: 2
@@ -2148,7 +2172,7 @@ Camera:
     height: 1
   near clip plane: 0.3
   far clip plane: 1000
-  field of view: 60
+  field of view: 11.020047
   orthographic: 0
   orthographic size: 5
   m_Depth: -100
@@ -3628,6 +3652,10 @@ MonoBehaviour:
   sourceCamera: {fileID: 0}
   targetHeight: 240
   filterMode: 0
+  persistence: 1
+  persistenceAmount: 0.55
+  brightTrailBias: 0.3
+  persistenceShader: {fileID: 4800000, guid: 3d56553141e47d346ad417e093da8418, type: 3}
 --- !u!114 &2016548955
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3640,7 +3668,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1344c3c82d62a2a41a3576d8abb8e3ea, type: 3}
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.RawImage
-  m_Material: {fileID: 0}
+  m_Material: {fileID: 2100000, guid: c5028a2266fe5a24388ef728f63cfbeb, type: 2}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
@@ -3653,8 +3681,8 @@ MonoBehaviour:
     serializedVersion: 2
     x: 0
     y: 0
-    width: 0.9980469
-    height: 0.9980237
+    width: 1
+    height: 1
 --- !u!222 &2016548956
 CanvasRenderer:
   m_ObjectHideFlags: 0
