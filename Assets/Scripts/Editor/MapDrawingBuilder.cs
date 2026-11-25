@@ -47,6 +47,8 @@ public static class MapDrawingBuilder
         var gridImage = gridRt.gameObject.AddComponent<RawImage>();
         gridImage.raycastTarget = false;
 
+        AddWallHints(frame);
+
         RectTransform ink = B.Rect("Ink", frame);
         B.Stretch(ink);
         var inkImage = ink.gameObject.AddComponent<RawImage>();
@@ -93,6 +95,20 @@ public static class MapDrawingBuilder
         so.ApplyModifiedPropertiesWithoutUndo();
 
         Selection.activeGameObject = ink.gameObject;
+    }
+
+    /// <summary>Fading pencil marks for the walls next to the player (between the grid and the ink).</summary>
+    public static void AddWallHints(Transform frame)
+    {
+        Transform old = frame.Find("Wall Hints");
+        if (old != null) Undo.DestroyObjectImmediate(old.gameObject);
+        RectTransform rt = B.Rect("Wall Hints", frame);
+        B.Stretch(rt);
+        var img = rt.gameObject.AddComponent<RawImage>();
+        img.raycastTarget = false;
+        Undo.AddComponent<MapWallHints>(rt.gameObject);
+        Transform ink = frame.Find("Ink");
+        if (ink != null) rt.SetSiblingIndex(ink.GetSiblingIndex());
     }
 
     /// <summary>Live "you are here" marker layer (above the start marker, below particles).</summary>

@@ -50,6 +50,10 @@ public class MapCanvas : MonoBehaviour
     [Tooltip("Share of pixels where the paper shows through the ink.")]
     [SerializeField, Range(0f, 0.3f)] private float wallSpeckle = 0.08f;
 
+    [Header("Auto Walls")]
+    [Tooltip("The outer ring of the map starts inked as wall, so the edge of the world is already drawn.")]
+    [SerializeField] private bool prefillBorder = true;
+
     [Header("Wall Juice")]
     [SerializeField] private bool wallJuice = true;
     [Tooltip("Particles thrown when a cell is filled or cleared.")]
@@ -186,8 +190,23 @@ public class MapCanvas : MonoBehaviour
     public void ClearInk()
     {
         for (int i = 0; i < _pixels.Length; i++) _pixels[i] = Clear;
-        if (_wall != null) System.Array.Clear(_wall, 0, _wall.Length);
+        if (_wall != null)
+        {
+            System.Array.Clear(_wall, 0, _wall.Length);
+            if (prefillBorder) FillBorder();
+        }
         _dirty = true;
+    }
+
+    /// <summary>Inks the outer ring of cells as wall (no effects): the edge of the world is known from the start.</summary>
+    private void FillBorder()
+    {
+        for (int y = 0; y < _rows; y++)
+        for (int x = 0; x < _cols; x++)
+            if (x == 0 || y == 0 || x == _cols - 1 || y == _rows - 1) _wall[y * _cols + x] = true;
+        for (int y = 0; y < _rows; y++)
+        for (int x = 0; x < _cols; x++)
+            if (_wall[y * _cols + x]) RenderWallCell(new Vector2Int(x, y));
     }
 
     // ------------------------------------------------------------------ input / stroke
@@ -252,6 +271,73 @@ public class MapCanvas : MonoBehaviour
         _particleDebt = 0f;
         Stamp(Round(at), erase ? eraserRadius : highlighterRadius);
         Burst(at, 4);
+    }
+
+    // ------------------------------------------------------------------ scripted walls
+
+    /// <summary>
+    /// Wipes a random share of the cells that have ink in them (walls and pen strokes), one after another over
+    /// <paramref name="duration"/> seconds, with the eraser crumbs. Returns how many cells will be erased.
+    /// </summary>
+    public int EraseRandomCells(float fraction, bool keepBorder, float duration)
+    {
+        if (_wall == null) return 0;
+        var inked = new System.Collections.Generic.List<Vector2Int>();
+        for (int y = 0; y < _rows; y++)
+        for (int x = 0; x < _cols; x++)
+        {
+            bool border = x == 0 || y == 0 || x == _cols - 1 || y == _rows - 1;
+            if (keepBorder && border) continue;
+            if (CellHasInk(x, y)) inked.Add(new Vector2Int(x, y));
+        }
+        // Shuffle, then keep the first share.
+        for (int i = inked.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            (inked[i], inked[j]) = (inked[j], inked[i]);
+        }
+        int count = Mathf.Clamp(Mathf.RoundToInt(inked.Count * Mathf.Clamp01(fraction)), 0, inked.Count);
+        if (count > 0) StartCoroutine(EraseSequence(inked.GetRange(0, count), duration));
+        return count;
+    }
+
+    private System.Collections.IEnumerator EraseSequence(System.Collections.Generic.List<Vector2Int> cells, float duration)
+    {
+        var wait = new WaitForSecondsRealtime(duration / Mathf.Max(1, cells.Count));
+        for (int i = 0; i < cells.Count; i++)
+        {
+            Vector2Int c = cells[i];
+            if (!_wallStroke) _wallFirst = i == 0;
+            int cp = CellPixels;
+            PaintWallCell(c, new Vector2((c.x + 0.5f) * cp, (c.y + 0.5f) * cp), erase: true);
+            if (duration > 0f) yield return wait;
+        }
+    }
+
+    /// <summary>True if any pixel inside the cell (its lines included) has ink.</summary>
+    private bool CellHasInk(int cx, int cy)
+    {
+        if (_wall[cy * _cols + cx]) return true;
+        int cp = CellPixels;
+        for (int y = cy * cp; y <= (cy + 1) * cp && y < _res.y; y++)
+        for (int x = cx * cp; x <= (cx + 1) * cp && x < _res.x; x++)
+            if (_pixels[y * _res.x + x].a > 0) return true;
+        return false;
+    }
+
+    /// <summary>Inks a map cell as wall (same look and juice as the Wall tool). False if it's off the map or already a wall.</summary>
+    public bool MarkWall(Vector2Int cell)
+    {
+        if (_wall == null || cell.x < 0 || cell.y < 0 || cell.x >= _cols || cell.y >= _rows || IsWall(cell.x, cell.y))
+            return false;
+        Vector2Int strokeCell = _lastWallCell;
+        bool strokeFirst = _wallFirst;
+        _wallFirst = true; // full thump: it's a single stamp
+        int cp = CellPixels;
+        PaintWallCell(cell, new Vector2((cell.x + 0.5f) * cp, (cell.y + 0.5f) * cp), false);
+        // Don't disturb a Wall-tool drag that might be in progress.
+        if (_wallStroke) { _lastWallCell = strokeCell; _wallFirst = strokeFirst; }
+        return true;
     }
 
     // ------------------------------------------------------------------ wall paint

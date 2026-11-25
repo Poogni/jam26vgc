@@ -49,7 +49,23 @@ public class MapPlayerMarker : MonoBehaviour
         if (_texture != null) Destroy(_texture);
     }
 
-    private void ApplySetting() => _image.enabled = GameSettings.PlayerMarker;
+    private bool _suppressed;
+
+    /// <summary>
+    /// Story override: while true the marker stays hidden whatever the Player Marker setting says
+    /// (e.g. after the objective, when the player loses track of where they are).
+    /// </summary>
+    public bool Suppressed
+    {
+        get => _suppressed;
+        set { _suppressed = value; ApplySetting(); }
+    }
+
+    private void ApplySetting()
+    {
+        if (_image == null) _image = GetComponent<RawImage>();
+        _image.enabled = GameSettings.PlayerMarker && !_suppressed;
+    }
 
     private void LateUpdate()
     {

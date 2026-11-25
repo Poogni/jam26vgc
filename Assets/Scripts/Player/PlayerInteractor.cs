@@ -13,6 +13,12 @@ public class PlayerInteractor : MonoBehaviour
     /// <summary>Raised when the player interacts with a tile: cell, tile.</summary>
     public static event System.Action<Vector2Int, TileDefinition> Interacted;
 
+    /// <summary>
+    /// Raised on every interact press (before the tile check): the cell faced, then the cell stood on.
+    /// For things that aren't tiles in the level asset, like the return beacon spawned at runtime.
+    /// </summary>
+    public static event System.Action<Vector2Int, Vector2Int> InteractPressed;
+
     private GridPlayerController _player;
     private InputAction _interact;
 
@@ -54,6 +60,7 @@ public class PlayerInteractor : MonoBehaviour
         LevelData level = _player.Level;
         if (level == null) return false;
         Vector2Int target = _player.FacingCell;
+        InteractPressed?.Invoke(target, _player.Cell);
         TileDefinition tile = level.GetTile(target);
         if (tile == null || tile.Behavior != TileDefinition.TileBehavior.Objective) return false;
         Interacted?.Invoke(target, tile);
