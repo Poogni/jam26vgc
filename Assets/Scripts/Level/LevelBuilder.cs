@@ -16,6 +16,7 @@ public class LevelBuilder : MonoBehaviour
     private const string RootName = "[Generated Level]";
     private static readonly Color RockColor = new Color(0.78f, 0.66f, 0.52f); // sun-baked plaster
     private static readonly Color RoofColor = new Color(0.55f, 0.40f, 0.28f);
+    private static readonly Color BeamColor = new Color(0.45f, 0.27f, 0.14f); // old wood (warm enough to survive the cool sky light)
     private static readonly Color GroundFallbackColor = new Color(0.72f, 0.60f, 0.46f);
 
     [SerializeField] private LevelData level;
@@ -78,6 +79,7 @@ public class LevelBuilder : MonoBehaviour
         var styledWalls = new Dictionary<int, MeshBuilder>();
         var styledFakes = new Dictionary<(TileDefinition, int), MeshBuilder>();
         var decals = new Dictionary<Material, MeshBuilder>();
+        MeshBuilder beams = new MeshBuilder(); // wooden beams under covered passages
 
         var q = new Vector3[4];
 
@@ -94,8 +96,19 @@ public class LevelBuilder : MonoBehaviour
                 if (tile.HasFloor) Get(ground, tile).Floor(q, 0f, up: true);
                 if (tile.Covered)
                 {
-                    roofs.Floor(q, level.CoveredHeight, up: false);
-                    roofs.Floor(q, level.CoveredHeight + 0.15f, up: true);
+                    if (styled)
+                    {
+                        // Sabat: a room built over the alley, in the same walls as the houses around it.
+                        var srng = new System.Random(CellSeed(c));
+                        int variant = srng.Next(variants);
+                        AddSabat(c, q, Get(styledWalls, variant), srng);
+                    }
+                    else
+                    {
+                        roofs.Floor(q, level.CoveredHeight, up: false);
+                        roofs.Floor(q, level.CoveredHeight + 0.15f, up: true);
+                    }
+                    AddBeams(c, q, beams);
                 }
             }
             else if (IsExtruded(c))
@@ -151,6 +164,7 @@ public class LevelBuilder : MonoBehaviour
         foreach (var kv in walls) Emit(root, $"Buildings - {kv.Key.Label}", kv.Value, level.WallMaterial, kv.Key.EditorColor);
         Emit(root, "Buildings - Rock", rockWalls, level.WallMaterial, RockColor);
         Emit(root, "Covered Roofs", roofs, level.WallMaterial, RoofColor);
+        Emit(root, "Covered Beams", beams, null, BeamColor, collider: false, matte: true);
         Emit(root, "Ground - Under Fake Walls", hiddenGround, level.GroundMaterial, GroundFallbackColor);
         foreach (var kv in styledWalls)
         {
@@ -206,6 +220,64 @@ public class LevelBuilder : MonoBehaviour
     }
 
     /// <summary>Solid cells inside the level are always buildings; outside, only the ring that walls in open cells.</summary>
+    // ------------------------------------------------------------------ covered passages (sabat)
+
+    private bool IsCovered(Vector2Int c)
+    {
+        TileDefinition t = level.GetTile(c);
+        return t != null && t.IsOpen && t.Covered;
+    }
+
+    /// <summary>Top of the room built over a covered cell: house height, but always at least a storey above the ceiling.</summary>
+    private float SabatTop(Vector2Int c) => Mathf.Max(level.BuildingHeight(c), level.CoveredHeight + DungeonGrid.CellSize);
+
+    /// <summary>Block from the passage ceiling up to SabatTop, with faces only where they can be seen.</summary>
+    private void AddSabat(Vector2Int c, Vector3[] q, MeshBuilder mb, System.Random rng)
+    {
+        float ceiling = level.CoveredHeight;
+        float top = SabatTop(c);
+        WallStyle style = level.WallStyle;
+
+        mb.Floor(q, ceiling, up: false); // the passage's ceiling
+        mb.Floor(q, top, up: true);      // its roof
+
+        for (int side = 0; side < 4; side++)
+        {
+            Vector2Int n = c + ((Facing)side).ToOffset();
+            float neighbourTop = IsCovered(n) ? SabatTop(n)
+                : level.IsOpen(n) ? 0f
+                : IsExtruded(n) ? level.BuildingHeight(n) : 0f;
+            float bottom = Mathf.Max(ceiling, neighbourTop);
+            if (bottom >= top) continue;
+            (Vector3 a, Vector3 b) = side switch
+            {
+                0 => (q[2], q[3]),
+                1 => (q[1], q[2]),
+                2 => (q[0], q[1]),
+                _ => (q[3], q[0]),
+            };
+            var offset = new Vector2((float)rng.NextDouble(), (float)rng.NextDouble());
+            mb.Wall(a, b, bottom, top, offset, style.TextureSize, rng.NextDouble() < 0.5);
+        }
+    }
+
+    /// <summary>Three wooden beams across the passage, just under its ceiling.</summary>
+    private void AddBeams(Vector2Int c, Vector3[] q, MeshBuilder mb)
+    {
+        // Beams span across the alley: if it runs north-south they go west-east, and vice versa.
+        bool northSouth = level.IsWalkable(c + Vector2Int.up) || level.IsWalkable(c + Vector2Int.down);
+        bool eastWest = level.IsWalkable(c + Vector2Int.right) || level.IsWalkable(c + Vector2Int.left);
+        bool spanWestEast = northSouth || !eastWest;
+
+        // Start/end edges of each beam (two opposite cell edges), and how far along the alley each sits.
+        (Vector3 a0, Vector3 a1, Vector3 b0, Vector3 b1) = spanWestEast
+            ? (q[0], q[3], q[1], q[2])   // west edge SW->NW, east edge SE->NE
+            : (q[0], q[1], q[3], q[2]);  // south edge SW->SE, north edge NW->NE
+        float y = level.CoveredHeight - 0.02f;
+        foreach (float t in new[] { 0.18f, 0.5f, 0.82f })
+            mb.Box(Vector3.Lerp(a0, a1, t), Vector3.Lerp(b0, b1, t), y, 0.16f, 0.2f);
+    }
+
     private bool IsExtruded(Vector2Int c)
     {
         if (level.IsOpen(c)) return false;
@@ -293,7 +365,7 @@ public class LevelBuilder : MonoBehaviour
     }
 
     private static void Emit(Transform root, string objectName, MeshBuilder mb, Material material, Color tint,
-        bool collider = true, bool alwaysTint = false, bool shadows = true)
+        bool collider = true, bool alwaysTint = false, bool shadows = true, bool matte = false)
     {
         if (mb.IsEmpty) return;
 
@@ -307,7 +379,12 @@ public class LevelBuilder : MonoBehaviour
         renderer.sharedMaterial = material != null ? material : FallbackMaterial;
         if (!shadows) renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         if (collider) go.AddComponent<MeshCollider>().sharedMesh = mesh;
-        if (material == null || alwaysTint) go.AddComponent<PlaceholderTint>().Color = tint;
+        if (material == null || alwaysTint)
+        {
+            var t = go.AddComponent<PlaceholderTint>();
+            t.Matte = matte;
+            t.Color = tint;
+        }
     }
 
     private void SpawnProp(TileDefinition tile, Vector2Int c, Transform root)
@@ -426,6 +503,34 @@ public class LevelBuilder : MonoBehaviour
         }
 
         /// <summary>A decal quad from p0 to p1 (along the wall), y0..y1, showing the whole texture once.</summary>
+        /// <summary>A beam from a to b (horizontal), hanging down from y: width w, depth h. Faces point outward.</summary>
+        public void Box(Vector3 a, Vector3 b, float y, float w, float h)
+        {
+            a.y = b.y = 0f;
+            Vector3 dir = (b - a).normalized;
+            Vector3 side = Vector3.Cross(Vector3.up, dir) * (w * 0.5f);
+            Vector3 top = Vector3.up * y, bot = Vector3.up * (y - h);
+            Vector3 a0 = a - side, a1 = a + side, b0 = b - side, b1 = b + side;
+            Vector3 centre = (a + b) * 0.5f + Vector3.up * (y - h * 0.5f);
+
+            Outward(a0 + bot, a1 + bot, b1 + bot, b0 + bot, centre); // bottom
+            Outward(a0 + top, b0 + top, b1 + top, a1 + top, centre); // top
+            Outward(a0 + bot, b0 + bot, b0 + top, a0 + top, centre); // side
+            Outward(a1 + bot, a1 + top, b1 + top, b1 + bot, centre); // other side
+            Outward(a0 + bot, a0 + top, a1 + top, a1 + bot, centre); // end a
+            Outward(b0 + bot, b1 + bot, b1 + top, b0 + top, centre); // end b
+        }
+
+        /// <summary>Quad wound so it faces away from centre.</summary>
+        private void Outward(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, Vector3 centre)
+        {
+            Vector3 normal = Vector3.Cross(p1 - p0, p2 - p0); // Unity front face = clockwise
+            Vector3 mid = (p0 + p1 + p2 + p3) * 0.25f;
+            Vector2 uv = Vector2.zero;
+            if (Vector3.Dot(normal, mid - centre) > 0f) Quad(p0, p1, p2, p3, uv, uv, uv, uv);
+            else Quad(p0, p3, p2, p1, uv, uv, uv, uv);
+        }
+
         public void Decal(Vector3 p0, Vector3 p1, float y0, float y1, bool flip)
         {
             float u0 = flip ? 1f : 0f, u1 = flip ? 0f : 1f;

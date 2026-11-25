@@ -162,10 +162,18 @@ Shader "Retro/Medina Wall"
                 inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(input.positionCS);
                 half4 shadowMask = half4(1, 1, 1, 1);
 
+                // Screen-space ambient occlusion (URP's SSAO feature): full on ambient, a little on direct light.
+                half indirectAO = 1.0, directAO = 1.0;
+            #if defined(_SCREEN_SPACE_OCCLUSION)
+                AmbientOcclusionFactor ao = GetScreenSpaceAmbientOcclusion(inputData.normalizedScreenSpaceUV);
+                indirectAO = ao.indirectAmbientOcclusion;
+                directAO = ao.directAmbientOcclusion;
+            #endif
+
                 Light mainLight = GetMainLight(TransformWorldToShadowCoord(pos), pos, shadowMask);
-                half3 lighting = SampleSH(n); // ambient
+                half3 lighting = SampleSH(n) * indirectAO; // ambient
                 lighting += mainLight.color * saturate(dot(n, mainLight.direction))
-                          * mainLight.shadowAttenuation * mainLight.distanceAttenuation;
+                          * mainLight.shadowAttenuation * mainLight.distanceAttenuation * directAO;
 
             #if defined(_ADDITIONAL_LIGHTS)
                 uint lightCount = GetAdditionalLightsCount();
@@ -221,6 +229,46 @@ Shader "Retro/Medina Wall"
             }
 
             half4 ShadowFrag(Varyings input) : SV_Target { return 0; }
+            ENDHLSL
+        }
+
+        Pass
+        {
+            // Normals for SSAO (and anything else that needs the depth-normals texture). Same encoding as URP Lit.
+            Name "DepthNormals"
+            Tags { "LightMode"="DepthNormals" }
+            ZWrite On
+
+            HLSLPROGRAM
+            #pragma target 2.0
+            #pragma vertex DNVert
+            #pragma fragment DNFrag
+            #pragma multi_compile_instancing
+            #pragma multi_compile_fragment _ _GBUFFER_NORMALS_OCT
+
+            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; UNITY_VERTEX_INPUT_INSTANCE_ID };
+            struct Varyings { float4 positionCS : SV_POSITION; float3 normalWS : TEXCOORD0; };
+
+            Varyings DNVert(Attributes input)
+            {
+                Varyings o;
+                UNITY_SETUP_INSTANCE_ID(input);
+                o.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                o.normalWS = TransformObjectToWorldNormal(input.normalOS);
+                return o;
+            }
+
+            half4 DNFrag(Varyings input) : SV_Target
+            {
+            #if defined(_GBUFFER_NORMALS_OCT)
+                float3 normalWS = normalize(input.normalWS);
+                float2 oct = PackNormalOctQuadEncode(normalWS);
+                half3 packed = PackFloat2To888(saturate(oct * 0.5 + 0.5));
+                return half4(packed, 0.0);
+            #else
+                return half4(NormalizeNormalPerPixel(input.normalWS), 0.0);
+            #endif
+            }
             ENDHLSL
         }
 

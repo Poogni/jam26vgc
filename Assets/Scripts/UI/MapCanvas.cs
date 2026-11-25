@@ -4,7 +4,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// Freehand pixel drawing on the cartography map, like the pencil in Paint, with a weighted brush:
-/// the brush trails the cursor with some inertia (smooths shaky strokes) and draws heavier when moving slowly.
+/// the brush trails the cursor with some inertia (smooths shaky strokes) and draws at a constant size.
 /// Sits on a transparent "ink" RawImage over the generated grid, so the eraser only removes ink.
 /// Left mouse draws with the current tool, right mouse always erases. Drawing throws off pixel particles.
 /// Built by Tools > Dungeon > Create Map Drawing.
@@ -23,17 +23,17 @@ public class MapCanvas : MonoBehaviour
     [Header("Weighted Brush")]
     [Tooltip("How heavy the brush feels. 0 = sticks to the cursor, 0.9 = drags far behind (very smooth lines).")]
     [SerializeField, Range(0f, 0.95f)] private float weight = 0.55f;
-    [Tooltip("Brush speed (ink pixels per second) at which the line is at its thinnest.")]
+    [Tooltip("Off = the pen always draws at Pen Radius. On = thinner when moving fast (pressure-like).")]
+    [SerializeField] private bool speedChangesSize = false;
+    [Tooltip("Brush speed (ink pixels per second) at which the line is at its thinnest (only if speed changes size).")]
     [SerializeField, Min(1f)] private float speedForThinnest = 220f;
 
     [Header("Pen")]
     [Tooltip("Sepia ink, readable on the paper.")]
     [SerializeField] private Color penColor = new Color(0.20f, 0.13f, 0.08f);
-    [Tooltip("Radius in ink pixels of the dot where a stroke starts.")]
-    [SerializeField, Range(0, 8)] private int penRadiusStart = 1;
-    [Tooltip("Radius in ink pixels when moving slowly (heavy).")]
+    [Tooltip("Pen size in ink pixels (radius). Used for the whole stroke.")]
     [SerializeField, Range(0, 8)] private int penRadiusSlow = 1;
-    [Tooltip("Radius in ink pixels when moving fast (light).")]
+    [Tooltip("Only if speed changes size: radius when moving fast.")]
     [SerializeField, Range(0, 8)] private int penRadiusFast = 0;
 
     [Header("Eraser")]
@@ -163,7 +163,7 @@ public class MapCanvas : MonoBehaviour
         _strokeErases = erase;
         _brush = _target = at;
         _particleDebt = 0f;
-        Stamp(Round(at), erase ? eraserRadius : penRadiusStart);
+        Stamp(Round(at), erase ? eraserRadius : penRadiusSlow);
         Burst(at, 4);
     }
 
@@ -172,12 +172,16 @@ public class MapCanvas : MonoBehaviour
         float dist = Vector2.Distance(_brush, next);
         if (dist < 0.01f) return;
 
-        // Heavier (thicker) when slow, lighter when fast.
+        // Constant pen size (optionally thinner when moving fast).
         int radius = eraserRadius;
         if (!_strokeErases)
         {
-            float speed01 = Mathf.Clamp01(dist / dt / speedForThinnest);
-            radius = Mathf.RoundToInt(Mathf.Lerp(penRadiusSlow, penRadiusFast, speed01));
+            radius = penRadiusSlow;
+            if (speedChangesSize)
+            {
+                float speed01 = Mathf.Clamp01(dist / dt / speedForThinnest);
+                radius = Mathf.RoundToInt(Mathf.Lerp(penRadiusSlow, penRadiusFast, speed01));
+            }
         }
 
         DrawLine(Round(_brush), Round(next), radius);

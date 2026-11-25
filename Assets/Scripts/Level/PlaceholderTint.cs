@@ -9,13 +9,22 @@ public class PlaceholderTint : MonoBehaviour
 {
     private static readonly int BaseColor = Shader.PropertyToID("_BaseColor");
     private static readonly int LegacyColor = Shader.PropertyToID("_Color");
+    private static readonly int Smoothness = Shader.PropertyToID("_Smoothness");
 
     [SerializeField] private Color color = Color.gray;
+    [Tooltip("No shine: stops the sky's reflection washing out dark colours (wood, earth).")]
+    [SerializeField] private bool matte;
 
     public Color Color
     {
         get => color;
         set { color = value; Apply(); }
+    }
+
+    public bool Matte
+    {
+        get => matte;
+        set { matte = value; Apply(); }
     }
 
     private void OnEnable() => Apply();
@@ -29,6 +38,7 @@ public class PlaceholderTint : MonoBehaviour
         r.GetPropertyBlock(block);
         block.SetColor(BaseColor, color);
         block.SetColor(LegacyColor, color);
+        if (matte) block.SetFloat(Smoothness, 0f);
         r.SetPropertyBlock(block);
     }
 }
