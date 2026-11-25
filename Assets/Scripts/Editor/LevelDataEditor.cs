@@ -432,6 +432,7 @@ public class LevelDataEditor : Editor
             }
 
             if (tile != null) DrawBehaviorMarker(inner, tile);
+            if (tile != null && tile.Archway != null && tile.IsOpen) DrawArchMarker(inner);
         }
 
         // Selected cell, and the teleport it links to.
@@ -520,6 +521,25 @@ public class LevelDataEditor : Editor
                 Handles.DrawAAPolyLine(3f, new Vector2(r.x, r.y + 1.5f), new Vector2(r.xMax, r.y + 1.5f));
                 break;
         }
+    }
+
+    /// <summary>Legend: small white horseshoe arch = archway (sabat entrance / exit).</summary>
+    private static void DrawArchMarker(Rect r)
+    {
+        float w = r.width * 0.26f, h = r.height * 0.32f;
+        Vector2 baseL = new Vector2(r.center.x - w, r.center.y + h), baseR = new Vector2(r.center.x + w, r.center.y + h);
+        var pts = new List<Vector3> { baseL, new Vector2(baseL.x, r.center.y) };
+        for (int i = 0; i <= 10; i++)
+        {
+            float t = Mathf.PI * i / 10f; // half circle over the top (screen y grows downward)
+            pts.Add(new Vector2(r.center.x - Mathf.Cos(t) * w, r.center.y - Mathf.Sin(t) * w * 1.1f));
+        }
+        pts.Add(new Vector2(baseR.x, r.center.y));
+        pts.Add(baseR);
+        Handles.color = new Color(0f, 0f, 0f, 0.8f);
+        Handles.DrawAAPolyLine(4.5f, pts.ToArray());
+        Handles.color = new Color(1f, 0.97f, 0.9f);
+        Handles.DrawAAPolyLine(2f, pts.ToArray());
     }
 
     private static void DrawStartArrow(Rect cell, Facing facing)

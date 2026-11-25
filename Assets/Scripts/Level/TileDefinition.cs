@@ -50,6 +50,11 @@ public class TileDefinition : ScriptableObject
     [Tooltip("Open tiles only: put a roof over this cell (covered passage / souk). Open sky otherwise.")]
     [SerializeField] private bool covered;
 
+    [Tooltip("Open tiles only: arch placed on this cell's thresholds between covered and open-sky ground, facing the " +
+             "open side. Paint it on the first and last cell of a covered passage (sabat) to mark its entrance and " +
+             "exit. With no such threshold, the arch stands across the alley in the middle of the cell.")]
+    [SerializeField] private GameObject archway;
+
     [Tooltip("Solid tiles only: building height in stories. 0 = use the level's random min..max.")]
     [SerializeField, Min(0)] private int storiesOverride;
 
@@ -69,6 +74,7 @@ public class TileDefinition : ScriptableObject
     public GameObject Prefab => prefab;
     public bool HasFloor => hasFloor;
     public bool Covered => covered;
+    public GameObject Archway => archway;
     public int StoriesOverride => storiesOverride;
     public TileDefinition DisguiseAs => disguiseAs;
     public Color DisguiseTint => disguiseTint;

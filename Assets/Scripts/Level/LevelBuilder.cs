@@ -154,6 +154,9 @@ public class LevelBuilder : MonoBehaviour
                 mb.Floor(q, h, up: true); // flat roof
             }
 
+            if (tile != null && tile.Archway != null && tile.IsOpen && level.InBounds(c))
+                SpawnArches(tile, c, q, root);
+
             if (tile != null && tile.Prefab != null && level.InBounds(c))
                 SpawnProp(tile, c, root);
             else if (tile != null && tile.Behavior == TileDefinition.TileBehavior.Objective && level.InBounds(c))
@@ -387,18 +390,79 @@ public class LevelBuilder : MonoBehaviour
         }
     }
 
+    private static GameObject InstantiateIn(GameObject prefab, Transform root)
+    {
+#if UNITY_EDITOR
+        if (!Application.isPlaying) return (GameObject)PrefabUtility.InstantiatePrefab(prefab, root);
+#endif
+        return Instantiate(prefab, root);
+    }
+
     private void SpawnProp(TileDefinition tile, Vector2Int c, Transform root)
     {
-        GameObject go;
-#if UNITY_EDITOR
-        go = Application.isPlaying
-            ? Instantiate(tile.Prefab, root)
-            : (GameObject)PrefabUtility.InstantiatePrefab(tile.Prefab, root);
-#else
-        go = Instantiate(tile.Prefab, root);
-#endif
+        GameObject go = InstantiateIn(tile.Prefab, root);
         go.transform.SetPositionAndRotation(level.CellCenter(c), level.FacingRotation(c, Facing.North));
         go.name = $"{tile.Label} {c.x},{c.y}";
+    }
+
+    // ------------------------------------------------------------------ archways
+
+    /// <summary>
+    /// Arches on every edge where this cell meets walkable ground on the other side of a covered / open-sky
+    /// threshold, facing the open-sky side. Without such an edge, one arch stands across the alley at the cell centre.
+    /// </summary>
+    private void SpawnArches(TileDefinition tile, Vector2Int c, Vector3[] q, Transform root)
+    {
+        bool covered = IsCovered(c);
+        int placed = 0;
+        for (int side = 0; side < 4; side++)
+        {
+            Vector2Int n = c + ((Facing)side).ToOffset();
+            if (!level.IsWalkable(n) || IsCovered(n) == covered) continue;
+            // Arch tiles on both sides of one threshold: only the covered one places it.
+            TileDefinition other = level.GetTile(n);
+            if (!covered && other != null && other.Archway != null && other.IsOpen) continue;
+
+            (Vector3 a, Vector3 b) = side switch
+            {
+                0 => (q[2], q[3]),
+                1 => (q[1], q[2]),
+                2 => (q[0], q[1]),
+                _ => (q[3], q[0]),
+            };
+            // Counter-clockwise edge: Cross(up, along) points out of this cell. Face the open-sky side.
+            PlaceArch(tile, a, b, covered ? 1f : -1f, root, $"{tile.Label} {c.x},{c.y} {(Facing)side}");
+            placed++;
+        }
+        if (placed > 0) return;
+
+        // Free-standing gate across the alley (same axis rule as the beams).
+        bool northSouth = level.IsWalkable(c + Vector2Int.up) || level.IsWalkable(c + Vector2Int.down);
+        bool eastWest = level.IsWalkable(c + Vector2Int.right) || level.IsWalkable(c + Vector2Int.left);
+        bool spanWestEast = northSouth || !eastWest;
+        (Vector3 p0, Vector3 p1) = spanWestEast
+            ? ((q[0] + q[3]) * 0.5f, (q[1] + q[2]) * 0.5f)  // west edge middle -> east edge middle
+            : ((q[1] + q[0]) * 0.5f, (q[2] + q[3]) * 0.5f); // south edge middle -> north edge middle
+        PlaceArch(tile, p0, p1, 1f, root, $"{tile.Label} {c.x},{c.y}");
+    }
+
+    /// <summary>One arch standing on the line a-b (ground level), stretched to its length.</summary>
+    private static void PlaceArch(TileDefinition tile, Vector3 a, Vector3 b, float facing, Transform root, string objectName)
+    {
+        Vector3 along = b - a;
+        along.y = 0f;
+        float length = along.magnitude;
+        if (length < 0.01f) return;
+        Vector3 forward = Vector3.Cross(Vector3.up, along / length) * facing;
+
+        GameObject go = InstantiateIn(tile.Archway, root);
+        go.name = objectName;
+        go.transform.SetPositionAndRotation(new Vector3((a.x + b.x) * 0.5f, 0f, (a.z + b.z) * 0.5f),
+            Quaternion.LookRotation(forward, Vector3.up));
+        Vector3 scale = go.transform.localScale;
+        scale.x *= length / DungeonGrid.CellSize; // follow the warped lattice: the arch spans the edge it sits on
+        go.transform.localScale = scale;
+        go.isStatic = true;
     }
 
     /// <summary>Stand-in landmark for an objective tile without a prefab: a gold pillar on a low plinth.</summary>

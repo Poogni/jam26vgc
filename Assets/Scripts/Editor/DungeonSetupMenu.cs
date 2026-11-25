@@ -126,6 +126,8 @@ public static class DungeonSetupMenu
             behavior: TileDefinition.TileBehavior.FakeWall, disguise: tiles['#']);
         tiles['O'] = Tile("Objective", new Color(1.00f, 0.80f, 0.25f), TileDefinition.TileShape.Open,
             behavior: TileDefinition.TileBehavior.Objective, blocks: true);
+        tiles['A'] = Tile("Archway", new Color(0.36f, 0.52f, 0.70f), TileDefinition.TileShape.Open, covered: true);
+        AssignArchway(tiles['A']);
         AssetDatabase.SaveAssets();
         return tiles;
     }
@@ -192,6 +194,18 @@ public static class DungeonSetupMenu
         tile.EditorSetup(label, color, shape, covered, stories, behavior, blocks, disguise);
         AssetDatabase.CreateAsset(tile, path);
         return tile;
+    }
+
+    private const string ArchwayPrefabPath = "Assets/Models/Archway/Archway.prefab";
+
+    /// <summary>Gives the archway tile the arch model, if it has none yet.</summary>
+    private static void AssignArchway(TileDefinition tile)
+    {
+        var so = new SerializedObject(tile);
+        SerializedProperty arch = so.FindProperty("archway");
+        if (arch.objectReferenceValue != null) return;
+        arch.objectReferenceValue = AssetDatabase.LoadAssetAtPath<GameObject>(ArchwayPrefabPath);
+        so.ApplyModifiedPropertiesWithoutUndo();
     }
 
     private static void EnsureFolder(string path)
