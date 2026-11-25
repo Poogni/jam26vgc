@@ -501,16 +501,16 @@ MonoBehaviour:
   - {fileID: 11400000, guid: b548ab14123903d4190ee46d2bfbaded, type: 2}
   playerStart: {x: 12, y: 1}
   startFacing: 0
-  jitter: 0.12
-  bend: 0.5
-  bendScale: 7
-  seed: 1
+  jitter: 0.06
+  bend: 0.2
+  bendScale: 15
+  seed: 79932
   storyHeight: 2.5
   minStories: 2
   maxStories: 4
   heightClusterSize: 3
   heightRandomness: 0.25
-  roofJitter: 0.35
+  roofJitter: 0.72
   coveredHeight: 3.2
   groundMaterial: {fileID: 2100000, guid: d6377b73c4729b04f8b8040e116333f1, type: 2}
   wallMaterial: {fileID: 0}
