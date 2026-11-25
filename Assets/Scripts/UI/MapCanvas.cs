@@ -131,11 +131,31 @@ public class MapCanvas : MonoBehaviour
         _image.texture = _texture;
         BuildStamps();
 
+        EnsureWallButton();
+
         if (penButton != null) penButton.onClick.AddListener(() => SetTool(Tool.Pen));
         if (eraserButton != null) eraserButton.onClick.AddListener(() => SetTool(Tool.Eraser));
         if (wallButton != null) wallButton.onClick.AddListener(() => SetTool(Tool.Wall));
         SetTool(Tool.Pen);
         _toolsReady = true; // button pulses only for the player's own clicks
+    }
+
+    /// <summary>
+    /// The Wall button is a normal part of the tool bar: if the scene doesn't have it (e.g. it was never saved, or an
+    /// undo removed it), it is cloned from the Eraser button one slot to the right, so the tool is always available.
+    /// </summary>
+    private void EnsureWallButton()
+    {
+        if (wallButton != null || eraserButton == null) return;
+
+        var source = (RectTransform)eraserButton.transform;
+        Button clone = Instantiate(eraserButton, source.parent);
+        clone.name = "Wall Button";
+        clone.onClick.RemoveAllListeners();
+        var rt = (RectTransform)clone.transform;
+        rt.anchoredPosition = source.anchoredPosition + new Vector2(source.sizeDelta.x + 14f, 0f);
+        foreach (Text t in clone.GetComponentsInChildren<Text>()) t.text = "Wall";
+        wallButton = clone;
     }
 
     private void Start()
