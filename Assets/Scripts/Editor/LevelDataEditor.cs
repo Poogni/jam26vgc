@@ -113,6 +113,12 @@ public class LevelDataEditor : Editor
         EditorGUILayout.PropertyField(serializedObject.FindProperty("groundMaterial"));
         EditorGUILayout.PropertyField(serializedObject.FindProperty("wallMaterial"));
 
+        EditorGUILayout.Space(4);
+        EditorGUILayout.LabelField("Objective", EditorStyles.boldLabel);
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("objectiveName"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("objectiveFoundText"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("objectiveCompleteText"));
+
         bool changed = EditorGUI.EndChangeCheck();
         serializedObject.ApplyModifiedProperties();
         if (changed) LevelPreview.Rebuild(Level);
@@ -470,8 +476,9 @@ public class LevelDataEditor : Editor
 
     private static readonly Color TeleportColor = new Color(0.25f, 0.55f, 1f);
     private static readonly Color FakeWallLine = new Color(0.9f, 0.1f, 0.15f);
+    private static readonly Color ObjectiveColor = new Color(1f, 0.78f, 0.15f);
 
-    /// <summary>Map legend: blue circle = teleport, red hatching + line = fake wall.</summary>
+    /// <summary>Legend: blue circle = teleport, red hatching + line = fake wall, gold diamond = objective.</summary>
     private static void DrawBehaviorMarker(Rect r, TileDefinition tile)
     {
         Vector3 center = r.center;
@@ -482,6 +489,21 @@ public class LevelDataEditor : Editor
                 Handles.color = TeleportColor;
                 Handles.DrawWireDisc(center, Vector3.forward, radius + 1f, Mathf.Max(2f, r.width * 0.12f));
                 break;
+
+            case TileDefinition.TileBehavior.Objective:
+            {
+                // Gold diamond with a star point: "X marks the spot".
+                float s = r.width * 0.36f;
+                Vector3 up = center + Vector3.down * s, right = center + Vector3.right * s;
+                Vector3 down = center + Vector3.up * s, left = center + Vector3.left * s;
+                Handles.color = Color.black;
+                Handles.DrawAAPolyLine(4f, up, right, down, left, up);
+                Handles.color = ObjectiveColor;
+                Handles.DrawAAConvexPolygon(up, right, down, left);
+                Handles.color = Color.white;
+                Handles.DrawSolidDisc(center, Vector3.forward, Mathf.Max(1.5f, s * 0.22f));
+                break;
+            }
 
             case TileDefinition.TileBehavior.FakeWall:
                 Handles.color = new Color(FakeWallLine.r, FakeWallLine.g, FakeWallLine.b, 0.7f);
@@ -601,6 +623,12 @@ public class LevelDataEditor : Editor
             case TileDefinition.TileBehavior.FakeWall:
                 EditorGUILayout.LabelField("Looks like a wall, but the player walks straight through.", EditorStyles.miniLabel);
                 break;
+
+            case TileDefinition.TileBehavior.Objective:
+                EditorGUILayout.LabelField("Objective: the player faces it and presses Interact, then must return to the start.", EditorStyles.wordWrappedMiniLabel);
+                if (!HasWalkableNeighbour(level, cell))
+                    EditorGUILayout.HelpBox("No walkable cell next to it: the player can't stand in front of it.", MessageType.Warning);
+                break;
         }
     }
 
@@ -616,6 +644,24 @@ public class LevelDataEditor : Editor
         }
         if (lonelyTeleports > 0)
             EditorGUILayout.HelpBox($"{lonelyTeleports} teleport tile(s) have no partner in their row or column.", MessageType.Warning);
+
+        int objectives = level.CountBehavior(TileDefinition.TileBehavior.Objective);
+        if (objectives == 0)
+            EditorGUILayout.HelpBox("No Objective tile yet: paint one where the player has to go.", MessageType.Info);
+        for (int y = 0; y < level.Height; y++)
+        for (int x = 0; x < level.Width; x++)
+        {
+            var c = new Vector2Int(x, y);
+            if (level.BehaviorAt(c) == TileDefinition.TileBehavior.Objective && !HasWalkableNeighbour(level, c))
+                EditorGUILayout.HelpBox($"Objective at ({x}, {y}) has no walkable cell next to it.", MessageType.Warning);
+        }
+    }
+
+    private static bool HasWalkableNeighbour(LevelData level, Vector2Int c)
+    {
+        for (int f = 0; f < 4; f++)
+            if (level.IsWalkable(c + ((Facing)f).ToOffset())) return true;
+        return false;
     }
 
     private void Commit()

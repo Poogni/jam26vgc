@@ -124,6 +124,8 @@ public static class DungeonSetupMenu
         // Fake wall imitates the plain wall tile.
         tiles['F'] = Tile("Fake Wall", new Color(1.00f, 0.62f, 0.70f), TileDefinition.TileShape.Solid,
             behavior: TileDefinition.TileBehavior.FakeWall, disguise: tiles['#']);
+        tiles['O'] = Tile("Objective", new Color(1.00f, 0.80f, 0.25f), TileDefinition.TileShape.Open,
+            behavior: TileDefinition.TileBehavior.Objective, blocks: true);
         AssetDatabase.SaveAssets();
         return tiles;
     }

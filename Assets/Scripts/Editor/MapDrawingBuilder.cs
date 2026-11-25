@@ -59,6 +59,8 @@ public static class MapDrawingBuilder
         var markerImage = markersRt.gameObject.AddComponent<RawImage>();
         markerImage.raycastTarget = false;
 
+        AddPlayerMarker(frame);
+
         RectTransform fx = B.Rect("Particles", frame);
         B.Stretch(fx);
         var particles = Undo.AddComponent<MapParticles>(fx.gameObject);
@@ -68,6 +70,8 @@ public static class MapDrawingBuilder
         Place((RectTransform)pen.transform, 18);
         Button eraser = B.CreateButton(toolBar, font, "Eraser", new Vector2(130, 64));
         Place((RectTransform)eraser.transform, 18 + 130 + 14);
+
+        AddCompassRose(toolBar);
 
         LevelBuilder builder = Object.FindAnyObjectByType<LevelBuilder>();
         var gso = new SerializedObject(mapGrid);
@@ -88,11 +92,39 @@ public static class MapDrawingBuilder
         Selection.activeGameObject = ink.gameObject;
     }
 
+    /// <summary>Live "you are here" marker layer (above the start marker, below particles).</summary>
+    public static void AddPlayerMarker(Transform frame)
+    {
+        Transform old = frame.Find("Player Marker");
+        if (old != null) Undo.DestroyObjectImmediate(old.gameObject);
+        RectTransform rt = B.Rect("Player Marker", frame);
+        var img = rt.gameObject.AddComponent<RawImage>();
+        img.raycastTarget = false;
+        Undo.AddComponent<MapPlayerMarker>(rt.gameObject);
+        Transform particles = frame.Find("Particles");
+        if (particles != null) rt.SetSiblingIndex(particles.GetSiblingIndex());
+    }
+
+    /// <summary>Static "north is up" compass at the far right of the tool bar, off the drawing area.</summary>
+    public static void AddCompassRose(Transform toolBar)
+    {
+        Transform old = toolBar.Find("Compass Rose");
+        if (old != null) Undo.DestroyObjectImmediate(old.gameObject);
+
+        RectTransform rt = B.Rect("Compass Rose", toolBar);
+        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(1f, 0.5f);
+        rt.anchoredPosition = new Vector2(-12, 0);
+        rt.sizeDelta = new Vector2(84, 84); // 34 px texture at ~2.5x, fits the 100-tall bar
+        var img = rt.gameObject.AddComponent<RawImage>();
+        img.raycastTarget = false;
+        Undo.AddComponent<MapCompassRose>(rt.gameObject);
+    }
+
     private static void RemoveOld(Transform mapArea, Transform toolBar)
     {
         Transform oldFrame = mapArea.Find("MapFrame");
         if (oldFrame != null) Undo.DestroyObjectImmediate(oldFrame.gameObject);
-        foreach (string name in new[] { "Pen Button", "Eraser Button" })
+        foreach (string name in new[] { "Pen Button", "Eraser Button", "Compass Rose" })
         {
             Transform old = toolBar.Find(name);
             if (old != null) Undo.DestroyObjectImmediate(old.gameObject);

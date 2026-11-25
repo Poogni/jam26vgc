@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d861e559bd2526c4f87826c5cca27267, type: 3}
+  m_Name: Tile_Objective
+  m_EditorClassIdentifier: Assembly-CSharp::TileDefinition
+  displayName: Objective
+  editorColor: {r: 1, g: 0.8, b: 0.25, a: 1}
+  shape: 0
+  behavior: 4
+  blocksMovement: 1
+  prefab: {fileID: 0}
+  hasFloor: 1
+  covered: 0
+  storiesOverride: 0
+  disguiseAs: {fileID: 0}
+  disguiseTint: {r: 1, g: 0.9, b: 0.88, a: 1}

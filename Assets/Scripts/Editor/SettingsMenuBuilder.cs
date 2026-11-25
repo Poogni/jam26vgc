@@ -40,7 +40,7 @@ public static class SettingsMenuBuilder
 
         RectTransform panel = Rect("Panel", overlay);
         panel.anchorMin = panel.anchorMax = panel.pivot = new Vector2(0.5f, 0.5f);
-        panel.sizeDelta = new Vector2(560, 380);
+        panel.sizeDelta = new Vector2(560, 450);
         AddImage(panel, PanelColor);
         AddOutline(panel.gameObject, Sand);
 
@@ -49,6 +49,7 @@ public static class SettingsMenuBuilder
 
         Toggle crt = CreateToggle(panel, font, "CRT Filter", 120);
         Toggle trails = CreateToggle(panel, font, "Motion Trails", 190);
+        Toggle marker = CreateToggle(panel, font, "Player Marker on Map", 260);
 
         Button close = CreateButton(panel, font, "Close", new Vector2(200, 56));
         var closeRt = (RectTransform)close.transform;
@@ -66,7 +67,7 @@ public static class SettingsMenuBuilder
         hintRt.anchoredPosition = new Vector2(0, 4);
 
         // Keyboard / gamepad navigation order: CRT -> Trails -> Close.
-        Chain(crt, trails, close);
+        Chain(crt, trails, marker, close);
 
         // Small button in the black strip under the tool bar (the tool bar itself is reserved for
         // cartography tools).
@@ -82,6 +83,7 @@ public static class SettingsMenuBuilder
         so.FindProperty("overlay").objectReferenceValue = overlay.gameObject;
         so.FindProperty("crtToggle").objectReferenceValue = crt;
         so.FindProperty("trailsToggle").objectReferenceValue = trails;
+        so.FindProperty("markerToggle").objectReferenceValue = marker;
         so.FindProperty("openButton").objectReferenceValue = open;
         so.FindProperty("closeButton").objectReferenceValue = close;
         so.FindProperty("viewport").objectReferenceValue = Object.FindAnyObjectByType<RetroViewport>();
@@ -100,9 +102,31 @@ public static class SettingsMenuBuilder
         foreach (Text t in rt.GetComponentsInChildren<Text>()) t.fontSize = 22;
     }
 
+    /// <summary>Adds the "Player Marker on Map" toggle to an existing settings menu (older scenes).</summary>
+    public static void EnsureMarkerToggle()
+    {
+        SettingsMenu menu = Object.FindAnyObjectByType<SettingsMenu>(FindObjectsInactive.Include);
+        if (menu == null) return;
+        var so = new SerializedObject(menu);
+        if (so.FindProperty("markerToggle").objectReferenceValue != null) return;
+
+        var crt = (Toggle)so.FindProperty("crtToggle").objectReferenceValue;
+        var trails = (Toggle)so.FindProperty("trailsToggle").objectReferenceValue;
+        var close = (Button)so.FindProperty("closeButton").objectReferenceValue;
+        var panel = (RectTransform)crt.transform.parent;
+        Undo.RecordObject(panel, "Add Marker Toggle");
+        panel.sizeDelta = new Vector2(panel.sizeDelta.x, 450);
+
+        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        Toggle marker = CreateToggle(panel, font, "Player Marker on Map", 260);
+        Chain(crt, trails, marker, close);
+        so.FindProperty("markerToggle").objectReferenceValue = marker;
+        so.ApplyModifiedProperties();
+    }
+
     // ------------------------------------------------------------------ widgets
 
-    private static Toggle CreateToggle(Transform parent, Font font, string label, float top)
+    internal static Toggle CreateToggle(Transform parent, Font font, string label, float top)
     {
         RectTransform rt = Rect(label + " Toggle", parent);
         TopRow(rt, top, 56, 60);
@@ -159,7 +183,7 @@ public static class SettingsMenuBuilder
         return button;
     }
 
-    private static void Chain(params Selectable[] items)
+    internal static void Chain(params Selectable[] items)
     {
         for (int i = 0; i < items.Length; i++)
         {

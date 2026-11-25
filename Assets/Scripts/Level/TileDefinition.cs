@@ -23,6 +23,8 @@ public class TileDefinition : ScriptableObject
         Teleport = 2,
         /// <summary>Looks like a wall, but you can walk straight through it.</summary>
         FakeWall = 3,
+        /// <summary>The location to find: face it and press Interact, then return to the start to complete it.</summary>
+        Objective = 4,
     }
 
     [Tooltip("Name shown in the level painter. Leave empty to use the asset name.")]

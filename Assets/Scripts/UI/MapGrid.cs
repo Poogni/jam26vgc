@@ -148,6 +148,7 @@ public class MapGrid : MonoBehaviour
                            ((onX && (x / cellPixels) % majorEvery == 0) || (onY && (y / cellPixels) % majorEvery == 0));
             px[y * res.x + x] = isMajor ? major : line;
         }
+
     }
 
     private void FillMarkers(Color32[] px, Vector2Int res)

@@ -6,6 +6,7 @@ public static class GameSettings
 {
     private const string CrtKey = "settings.crtFilter";
     private const string TrailsKey = "settings.motionTrails";
+    private const string MarkerKey = "settings.playerMarker";
 
     /// <summary>Raised after any setting changes.</summary>
     public static event Action Changed;
@@ -20,6 +21,13 @@ public static class GameSettings
     {
         get => PlayerPrefs.GetInt(TrailsKey, 1) == 1;
         set => Set(TrailsKey, value);
+    }
+
+    /// <summary>Show the live "you are here" marker on the cartography map.</summary>
+    public static bool PlayerMarker
+    {
+        get => PlayerPrefs.GetInt(MarkerKey, 1) == 1;
+        set => Set(MarkerKey, value);
     }
 
     private static void Set(string key, bool value)

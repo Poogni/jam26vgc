@@ -119,6 +119,8 @@ public class LevelBuilder : MonoBehaviour
 
             if (tile != null && tile.Prefab != null && level.InBounds(c))
                 SpawnProp(tile, c, root);
+            else if (tile != null && tile.Behavior == TileDefinition.TileBehavior.Objective && level.InBounds(c))
+                SpawnObjectivePlaceholder(tile, c, root);
         }
 
         foreach (var kv in ground) Emit(root, $"Ground - {kv.Key.Label}", kv.Value, level.GroundMaterial, kv.Key.EditorColor);
@@ -211,6 +213,28 @@ public class LevelBuilder : MonoBehaviour
 #endif
         go.transform.SetPositionAndRotation(level.CellCenter(c), level.FacingRotation(c, Facing.North));
         go.name = $"{tile.Label} {c.x},{c.y}";
+    }
+
+    /// <summary>Stand-in landmark for an objective tile without a prefab: a gold pillar on a low plinth.</summary>
+    private void SpawnObjectivePlaceholder(TileDefinition tile, Vector2Int c, Transform root)
+    {
+        var holder = new GameObject($"{tile.Label} {c.x},{c.y}").transform;
+        holder.SetParent(root, false);
+        holder.SetPositionAndRotation(level.CellCenter(c), level.FacingRotation(c, Facing.North));
+
+        Part(PrimitiveType.Cube, holder, new Vector3(0f, 0.15f, 0f), new Vector3(1.4f, 0.3f, 1.4f), new Color(0.55f, 0.45f, 0.32f));
+        Part(PrimitiveType.Cylinder, holder, new Vector3(0f, 1.1f, 0f), new Vector3(0.5f, 0.8f, 0.5f), tile.EditorColor);
+        Part(PrimitiveType.Sphere, holder, new Vector3(0f, 2.05f, 0f), new Vector3(0.55f, 0.55f, 0.55f), tile.EditorColor);
+    }
+
+    private static void Part(PrimitiveType type, Transform parent, Vector3 localPos, Vector3 scale, Color color)
+    {
+        GameObject go = GameObject.CreatePrimitive(type);
+        go.transform.SetParent(parent, false);
+        go.transform.localPosition = localPos;
+        go.transform.localScale = scale;
+        go.AddComponent<PlaceholderTint>().Color = color;
+        go.isStatic = true;
     }
 
     private static Material FallbackMaterial

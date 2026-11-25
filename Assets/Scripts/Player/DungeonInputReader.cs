@@ -24,8 +24,11 @@ public class DungeonInputReader : MonoBehaviour
     [Tooltip("How long (seconds) a press made mid-move is remembered and executed once the move ends.")]
     [SerializeField] private float bufferWindow = 0.2f;
 
-    [Tooltip("When true, holding a key keeps repeating its command.")]
+    [Tooltip("When true, holding a movement key keeps walking.")]
     [SerializeField] private bool repeatWhileHeld = true;
+
+    [Tooltip("When true, holding Q/E keeps turning. Off = one 90° turn per press.")]
+    [SerializeField] private bool repeatTurnsWhileHeld = false;
 
     private (InputAction action, GridCommand command)[] _bindings;
     private GridCommand _buffered;
@@ -109,8 +112,12 @@ public class DungeonInputReader : MonoBehaviour
 
         foreach (var b in Bindings)
         {
+            if (!repeatTurnsWhileHeld && IsTurn(b.command)) continue; // turns only happen on a fresh press
             if (b.action.IsPressed()) return b.command;
         }
         return GridCommand.None;
     }
+
+    private static bool IsTurn(GridCommand command) =>
+        command == GridCommand.TurnLeft || command == GridCommand.TurnRight;
 }

@@ -12,6 +12,7 @@ public class SettingsMenu : MonoBehaviour
     [SerializeField] private GameObject overlay;
     [SerializeField] private Toggle crtToggle;
     [SerializeField] private Toggle trailsToggle;
+    [SerializeField] private Toggle markerToggle;
     [SerializeField] private Button openButton;
     [SerializeField] private Button closeButton;
     [Tooltip("Found automatically if empty.")]
@@ -33,6 +34,11 @@ public class SettingsMenu : MonoBehaviour
         trailsToggle.SetIsOnWithoutNotify(GameSettings.MotionTrails);
         crtToggle.onValueChanged.AddListener(on => GameSettings.CrtFilter = on);
         trailsToggle.onValueChanged.AddListener(on => GameSettings.MotionTrails = on);
+        if (markerToggle != null)
+        {
+            markerToggle.SetIsOnWithoutNotify(GameSettings.PlayerMarker);
+            markerToggle.onValueChanged.AddListener(on => GameSettings.PlayerMarker = on);
+        }
         if (openButton != null) openButton.onClick.AddListener(Open);
         if (closeButton != null) closeButton.onClick.AddListener(Close);
 
@@ -60,6 +66,12 @@ public class SettingsMenu : MonoBehaviour
     {
         if (_menuAction.WasPressedThisFrame())
         {
+            // Esc closes an open message first.
+            if (!IsOpen && MessageBox.Instance != null && MessageBox.Instance.IsOpen)
+            {
+                MessageBox.Instance.Hide();
+                return;
+            }
             if (IsOpen) Close();
             else Open();
         }

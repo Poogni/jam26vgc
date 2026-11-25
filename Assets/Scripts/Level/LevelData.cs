@@ -49,6 +49,19 @@ public class LevelData : ScriptableObject
     [Tooltip("Optional. Leave empty to use grey-box materials tinted with each tile's color.")]
     [SerializeField] private Material wallMaterial;
 
+    [Tooltip("What the objective is called in messages.")]
+    [SerializeField] private string objectiveName = "the hidden courtyard";
+    [Tooltip("Shown when the player interacts with the objective. {0} = objective name.")]
+    [SerializeField, TextArea(2, 4)] private string objectiveFoundText =
+        "You found {0}. Now find your way back to where you started. Trust your map.";
+    [Tooltip("Shown when the player gets back to the start after finding the objective.")]
+    [SerializeField, TextArea(2, 4)] private string objectiveCompleteText =
+        "You made it back to where you began. Your map held true.";
+
+    public string ObjectiveName => objectiveName;
+    public string ObjectiveFoundText => string.Format(objectiveFoundText ?? "", objectiveName);
+    public string ObjectiveCompleteText => string.Format(objectiveCompleteText ?? "", objectiveName);
+
     public int Width => width;
     public int Height => height;
     public Vector2Int PlayerStart => playerStart;
@@ -72,6 +85,16 @@ public class LevelData : ScriptableObject
     {
         TileDefinition t = GetTile(c);
         return t != null && t.IsWalkable;
+    }
+
+    /// <summary>Number of objective tiles in the level.</summary>
+    public int CountBehavior(TileDefinition.TileBehavior behavior)
+    {
+        int n = 0;
+        for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+            if (BehaviorAt(new Vector2Int(x, y)) == behavior) n++;
+        return n;
     }
 
     public bool IsFakeWall(Vector2Int c)
