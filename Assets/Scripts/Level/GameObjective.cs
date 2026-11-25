@@ -23,6 +23,8 @@ public class GameObjective : MonoBehaviour
     [SerializeField] private MapCanvas map;
     [Tooltip("Found automatically if empty.")]
     [SerializeField] private MapPlayerMarker playerMarker;
+    [Tooltip("Found automatically if empty.")]
+    [SerializeField] private MapStickers stickers;
 
     [Header("On Finding The Objective")]
     [Tooltip("Hide the live player marker on the map for the rest of the game.")]
@@ -37,10 +39,19 @@ public class GameObjective : MonoBehaviour
     [SerializeField, TextArea(2, 3)] private string mapDamageText =
         "But the way here has cost you: parts of your map are smudged, and you can no longer tell where you stand.";
 
+    [Header("Landmark Beacons (stickers)")]
+    [Tooltip("Spawned over every landmark that has a sticker on its map cell when the objective is found.")]
+    [SerializeField] private GameObject landmarkBeaconPrefab;
+    [Tooltip("Added to the 'found' message when beacons rise. {0} = how many.")]
+    [SerializeField, TextArea(1, 3)] private string beaconsText =
+        "Far away, {0} beam(s) of light rise over the landmarks you marked on your map.";
+
     [Header("Return Beacon")]
     [Tooltip("Spawned on the starting cell once the objective is found. Interact with it to end the game.")]
     [SerializeField] private GameObject returnBeaconPrefab;
     [SerializeField] private string beaconTitle = "The Way Home";
+    [Tooltip("Interact pop-up shown when facing (or standing on) the return beacon.")]
+    [SerializeField] private string beaconPrompt = "Head home";
     [Tooltip("Shown after the completion text closes. Interact again restarts the level.")]
     [SerializeField, TextArea(2, 3)] private string endText = "Thanks for playing. Press Interact to start again.";
 
@@ -59,18 +70,25 @@ public class GameObjective : MonoBehaviour
         if (player == null) player = FindAnyObjectByType<GridPlayerController>();
         if (map == null) map = FindAnyObjectByType<MapCanvas>();
         if (playerMarker == null) playerMarker = FindAnyObjectByType<MapPlayerMarker>();
+        if (stickers == null) stickers = FindAnyObjectByType<MapStickers>();
     }
 
     private void OnEnable()
     {
         PlayerInteractor.Interacted += OnInteracted;
         PlayerInteractor.InteractPressed += OnInteractPressed;
+        PlayerInteractor.PromptProviders.Add(BeaconPrompt);
     }
+
+    /// <summary>Interact prompt for the return beacon (it isn't a level tile, so the interactor can't know it).</summary>
+    private string BeaconPrompt(Vector2Int faced, Vector2Int standing) =>
+        Current == Stage.Returning && AtBeacon(faced, standing) ? beaconPrompt : null;
 
     private void OnDisable()
     {
         PlayerInteractor.Interacted -= OnInteracted;
         PlayerInteractor.InteractPressed -= OnInteractPressed;
+        PlayerInteractor.PromptProviders.Remove(BeaconPrompt);
         if (MessageBox.Instance != null) MessageBox.Instance.Closed -= OnCompleteMessageClosed;
         if (MessageBox.Instance != null) MessageBox.Instance.Closed -= OnEndMessageClosed;
         GameInputLock.Unlock(this);
@@ -85,8 +103,10 @@ public class GameObjective : MonoBehaviour
         {
             case Stage.Searching:
                 SetStage(Stage.Returning);
+                int beacons = SpawnLandmarkBeacons();
                 Say(Capitalize(Level.ObjectiveName), Level.ObjectiveFoundText +
-                    (string.IsNullOrEmpty(mapDamageText) ? "" : "\n" + mapDamageText));
+                    (string.IsNullOrEmpty(mapDamageText) ? "" : "\n" + mapDamageText) +
+                    (beacons > 0 && !string.IsNullOrEmpty(beaconsText) ? "\n" + string.Format(beaconsText, beacons) : ""));
                 DamageMap();
                 SpawnBeacon();
                 break;
@@ -115,6 +135,37 @@ public class GameObjective : MonoBehaviour
     {
         if (hidePlayerMarker && playerMarker != null) playerMarker.Suppressed = true;
         if (map != null && eraseFraction > 0f) map.EraseRandomCells(eraseFraction, keepBorder, eraseDuration);
+    }
+
+    /// <summary>A beacon over each landmark that has a sticker on its map cell. Returns how many rose.</summary>
+    private int SpawnLandmarkBeacons()
+    {
+        if (stickers == null || landmarkBeaconPrefab == null)
+        {
+            if (stickers != null && stickers.Placed.Count > 0)
+                Debug.LogWarning($"{name}: stickers placed but no Landmark Beacon Prefab is set, so no beacons rise.", this);
+            return 0;
+        }
+        var lit = new System.Collections.Generic.HashSet<Landmark>();
+        foreach (Vector2Int cell in stickers.Placed)
+        {
+            Landmark best = Landmark.At(cell);
+            if (best == null)
+            {
+                Debug.Log($"Sticker at {cell}: no landmark on that cell, no beacon.");
+                continue;
+            }
+            if (!lit.Add(best)) continue;
+
+            // Just in front of the landmark, so the beam rises from the street beside it.
+            Transform t = best.transform;
+            GameObject beacon = Instantiate(landmarkBeaconPrefab, t.position + t.forward * 0.6f, Quaternion.identity);
+            beacon.name = $"Landmark Beacon - {best.DisplayName}";
+            Vector3 scale = beacon.transform.localScale;
+            beacon.transform.localScale = new Vector3(scale.x, 0.01f, scale.z);
+            Tween.Scale(beacon.transform, scale, 2f, Ease.OutCubic, startDelay: 0.3f * (lit.Count - 1));
+        }
+        return lit.Count;
     }
 
     private void SpawnBeacon()

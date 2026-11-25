@@ -479,6 +479,7 @@ public class LevelDataEditor : Editor
     private static readonly Color TeleportColor = new Color(0.25f, 0.55f, 1f);
     private static readonly Color FakeWallLine = new Color(0.9f, 0.1f, 0.15f);
     private static readonly Color ObjectiveColor = new Color(1f, 0.78f, 0.15f);
+    private static readonly Color LandmarkColor = new Color(0.72f, 0.45f, 1f);
 
     /// <summary>Legend: blue circle = teleport, red hatching + line = fake wall, gold diamond = objective.</summary>
     private static void DrawBehaviorMarker(Rect r, TileDefinition tile)
@@ -504,6 +505,29 @@ public class LevelDataEditor : Editor
                 Handles.DrawAAConvexPolygon(up, right, down, left);
                 Handles.color = Color.white;
                 Handles.DrawSolidDisc(center, Vector3.forward, Mathf.Max(1.5f, s * 0.22f));
+                break;
+            }
+
+            case TileDefinition.TileBehavior.Landmark:
+            {
+                // Violet five-point star: "something worth remembering here".
+                float outer = r.width * 0.36f, inner = outer * 0.45f;
+                var pts = new Vector3[10];
+                for (int i = 0; i < 10; i++)
+                {
+                    float ang = -Mathf.PI / 2f + i * Mathf.PI / 5f; // screen y grows downward: start pointing up
+                    float rad = i % 2 == 0 ? outer : inner;
+                    pts[i] = center + new Vector3(Mathf.Cos(ang), Mathf.Sin(ang)) * rad;
+                }
+                Handles.color = LandmarkColor;
+                for (int i = 0; i < 10; i += 2)
+                    Handles.DrawAAConvexPolygon(center, pts[i], pts[(i + 1) % 10], pts[(i + 2) % 10]);
+                Handles.DrawAAConvexPolygon(center, pts[9], pts[0], pts[1]);
+                Handles.color = Color.black;
+                var outline = new Vector3[11];
+                for (int i = 0; i < 10; i++) outline[i] = pts[i];
+                outline[10] = pts[0];
+                Handles.DrawAAPolyLine(2f, outline);
                 break;
             }
 
@@ -644,6 +668,21 @@ public class LevelDataEditor : Editor
             case TileDefinition.TileBehavior.FakeWall:
                 EditorGUILayout.LabelField("Looks like a wall, but the player walks straight through.", EditorStyles.miniLabel);
                 break;
+
+            case TileDefinition.TileBehavior.Landmark:
+            {
+                Landmark lm = tile.Prefab != null ? tile.Prefab.GetComponent<Landmark>() : null;
+                if (lm == null)
+                    EditorGUILayout.HelpBox("Landmark tile without a prefab that has a Landmark component: nothing to talk to.", MessageType.Warning);
+                else
+                    EditorGUILayout.LabelField($"Landmark \"{lm.DisplayName}\" ({lm.Lines.Count} lines). Edit its text on the prefab.", EditorStyles.wordWrappedMiniLabel);
+                Facing? side = level.StreetSide(cell);
+                if (side.HasValue)
+                    EditorGUILayout.LabelField(tile.IsOpen ? $"Stands in the cell, facing {side.Value}." : $"Hugs the {side.Value} wall face.", EditorStyles.miniLabel);
+                else
+                    EditorGUILayout.HelpBox("No walkable cell next to it: the player can't reach it.", MessageType.Warning);
+                break;
+            }
 
             case TileDefinition.TileBehavior.Objective:
                 EditorGUILayout.LabelField("Objective: the player faces it and presses Interact, then must return to the start.", EditorStyles.wordWrappedMiniLabel);

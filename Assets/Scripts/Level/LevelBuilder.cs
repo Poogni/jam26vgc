@@ -149,7 +149,7 @@ public class LevelBuilder : MonoBehaviour
                     else mb.Wall(a, b, bottom, h);
 
                     // Decals only on walls that face a street (that's where the player sees them).
-                    if (style != null && level.IsOpen(n)) AddDecals(style, decals, a, b, h, rng);
+                    if (style != null && level.IsOpen(n) && !HasWallProp(tile, c, side)) AddDecals(style, decals, a, b, h, rng);
                 }
                 mb.Floor(q, h, up: true); // flat roof
             }
@@ -401,9 +401,42 @@ public class LevelBuilder : MonoBehaviour
     private void SpawnProp(TileDefinition tile, Vector2Int c, Transform root)
     {
         GameObject go = InstantiateIn(tile.Prefab, root);
-        go.transform.SetPositionAndRotation(level.CellCenter(c), level.FacingRotation(c, Facing.North));
         go.name = $"{tile.Label} {c.x},{c.y}";
+        Facing? street = tile.Placement == TileDefinition.PropPlacement.FaceStreet ? level.StreetSide(c) : null;
+
+        if (street.HasValue && !tile.IsOpen)
+        {
+            // Hug the building's wall face toward the street: back of the prop on the wall, front toward the street.
+            var q = new Vector3[4];
+            level.CellCorners(c, q);
+            (Vector3 a, Vector3 b) = EdgeCorners(q, (int)street.Value);
+            Vector3 along = b - a;
+            along.y = 0f;
+            Vector3 outward = Vector3.Cross(Vector3.up, along.normalized);
+            go.transform.SetPositionAndRotation(new Vector3((a.x + b.x) * 0.5f, 0f, (a.z + b.z) * 0.5f),
+                Quaternion.LookRotation(outward, Vector3.up));
+        }
+        else
+        {
+            go.transform.SetPositionAndRotation(level.CellCenter(c), level.FacingRotation(c, street ?? Facing.North));
+        }
+
+        if (go.TryGetComponent(out Landmark landmark)) landmark.Cell = c;
     }
+
+    /// <summary>True if a Face Street prop hugs this side of a solid cell (no decals there, they'd poke through it).</summary>
+    private bool HasWallProp(TileDefinition tile, Vector2Int c, int side) =>
+        tile != null && tile.Prefab != null && !tile.IsOpen && tile.Placement == TileDefinition.PropPlacement.FaceStreet &&
+        level.StreetSide(c) == (Facing)side;
+
+    /// <summary>Corners of one cell edge in counter-clockwise order (so Cross(up, b - a) points out of the cell).</summary>
+    private static (Vector3, Vector3) EdgeCorners(Vector3[] q, int side) => side switch
+    {
+        0 => (q[2], q[3]), // North: NE -> NW
+        1 => (q[1], q[2]), // East:  SE -> NE
+        2 => (q[0], q[1]), // South: SW -> SE
+        _ => (q[3], q[0]), // West:  NW -> SW
+    };
 
     // ------------------------------------------------------------------ archways
 

@@ -15,7 +15,7 @@ using UnityEngine.UI;
 [RequireComponent(typeof(RawImage))]
 public class MapCanvas : MonoBehaviour
 {
-    public enum Tool { Pen, Eraser, Wall }
+    public enum Tool { Pen, Eraser, Wall, Sticker }
 
     [Header("Canvas")]
     [Tooltip("Ink resolution comes from this grid so lines up with its cells. Found in the parent if empty.")]
@@ -74,6 +74,9 @@ public class MapCanvas : MonoBehaviour
     [SerializeField] private Button penButton;
     [SerializeField] private Button eraserButton;
     [SerializeField] private Button wallButton;
+    [SerializeField] private Button stickerButton;
+    [Tooltip("Sticker layer the Sticker tool places on. Found next to this layer if empty.")]
+    [SerializeField] private MapStickers stickers;
     [SerializeField] private Color buttonNormal = new Color(0.25f, 0.19f, 0.13f);
     [SerializeField] private Color buttonSelected = new Color(0.93f, 0.84f, 0.68f);
     [SerializeField] private Color labelNormal = new Color(0.93f, 0.84f, 0.68f);
@@ -140,6 +143,8 @@ public class MapCanvas : MonoBehaviour
         if (penButton != null) penButton.onClick.AddListener(() => SetTool(Tool.Pen));
         if (eraserButton != null) eraserButton.onClick.AddListener(() => SetTool(Tool.Eraser));
         if (wallButton != null) wallButton.onClick.AddListener(() => SetTool(Tool.Wall));
+        if (stickers == null && transform.parent != null) stickers = transform.parent.GetComponentInChildren<MapStickers>(true);
+        if (stickerButton != null) stickerButton.onClick.AddListener(() => SetTool(Tool.Sticker));
         SetTool(Tool.Pen);
         _toolsReady = true; // button pulses only for the player's own clicks
     }
@@ -180,11 +185,20 @@ public class MapCanvas : MonoBehaviour
     {
         bool changed = tool != CurrentTool;
         CurrentTool = tool;
-        if (changed) PulseButton(tool == Tool.Pen ? penButton : tool == Tool.Eraser ? eraserButton : wallButton);
+        if (changed) PulseButton(ButtonFor(tool));
         Highlight(penButton, tool == Tool.Pen);
         Highlight(eraserButton, tool == Tool.Eraser);
         Highlight(wallButton, tool == Tool.Wall);
+        Highlight(stickerButton, tool == Tool.Sticker);
     }
+
+    private Button ButtonFor(Tool tool) => tool switch
+    {
+        Tool.Pen => penButton,
+        Tool.Eraser => eraserButton,
+        Tool.Wall => wallButton,
+        _ => stickerButton,
+    };
 
     /// <summary>Wipe all ink (the grid underneath is untouched).</summary>
     public void ClearInk()
@@ -231,6 +245,12 @@ public class MapCanvas : MonoBehaviour
             bool fresh = mouse.leftButton.wasPressedThisFrame || mouse.rightButton.wasPressedThisFrame;
             if (!fresh || !Inside(cursor)) return;
             bool rightClick = mouse.rightButton.isPressed;
+            if (CurrentTool == Tool.Sticker)
+            {
+                // One click = place / take back a sticker; no stroke.
+                if (stickers != null) stickers.Toggle(CellAt(cursor));
+                return;
+            }
             if (CurrentTool == Tool.Wall) BeginWallStroke(cursor, rightClick);
             else BeginStroke(cursor, rightClick || CurrentTool == Tool.Eraser);
             return;

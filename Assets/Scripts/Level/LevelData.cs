@@ -113,6 +113,17 @@ public class LevelData : ScriptableObject
         return t != null ? t.Behavior : TileDefinition.TileBehavior.None;
     }
 
+    /// <summary>
+    /// The side a Face Street prop on this cell turns to: the first walkable neighbour in N, E, S, W order.
+    /// Null if none (the prop then faces north).
+    /// </summary>
+    public Facing? StreetSide(Vector2Int c)
+    {
+        for (int side = 0; side < 4; side++)
+            if (IsWalkable(c + ((Facing)side).ToOffset())) return (Facing)side;
+        return null;
+    }
+
     // ---------------------------------------------------------------- teleports
 
     /// <summary>

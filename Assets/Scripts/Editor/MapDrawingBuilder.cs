@@ -94,7 +94,54 @@ public static class MapDrawingBuilder
         so.FindProperty("wallButton").objectReferenceValue = wall;
         so.ApplyModifiedPropertiesWithoutUndo();
 
+        AddStickerTool(frame, toolBar, canvas, font);
         Selection.activeGameObject = ink.gameObject;
+    }
+
+    private const float ToolWidth = 105f, ToolGap = 10f, ToolLeft = 18f;
+
+    /// <summary>
+    /// Sticker layer (above the ink, so the eraser never touches it) + a Sticker button as the 4th tool, with the
+    /// four tool buttons laid out to leave the compass rose its corner. Safe to run again.
+    /// </summary>
+    public static void AddStickerTool(Transform frame, Transform toolBar, MapCanvas canvas, Font font)
+    {
+        Transform oldLayer = frame.Find("Stickers");
+        if (oldLayer != null) Undo.DestroyObjectImmediate(oldLayer.gameObject);
+        RectTransform layer = B.Rect("Stickers", frame);
+        B.Stretch(layer);
+        var img = layer.gameObject.AddComponent<RawImage>();
+        img.raycastTarget = false;
+        var stickers = Undo.AddComponent<MapStickers>(layer.gameObject);
+        Transform markers = frame.Find("Markers");
+        if (markers != null) layer.SetSiblingIndex(markers.GetSiblingIndex()); // above the ink, under the start arrow
+
+        Transform oldButton = toolBar.Find("Sticker Button");
+        if (oldButton != null) Undo.DestroyObjectImmediate(oldButton.gameObject);
+        Button button = B.CreateButton(toolBar, font, "Sticker", new Vector2(ToolWidth, 64));
+        Text label = button.GetComponentInChildren<Text>();
+        label.resizeTextForBestFit = false;
+        label.fontSize = 21; // "Sticker 2" on one line in the narrower button
+        label.horizontalOverflow = HorizontalWrapMode.Overflow;
+
+        string[] order = { "Pen Button", "Eraser Button", "Wall Button", "Sticker Button" };
+        for (int i = 0; i < order.Length; i++)
+        {
+            var rt = toolBar.Find(order[i]) as RectTransform;
+            if (rt == null) continue;
+            Undo.RecordObject(rt, "Lay out tools");
+            rt.sizeDelta = new Vector2(ToolWidth, rt.sizeDelta.y);
+            Place(rt, ToolLeft + i * (ToolWidth + ToolGap));
+        }
+
+        var sso = new SerializedObject(stickers);
+        sso.FindProperty("countLabel").objectReferenceValue = label;
+        sso.ApplyModifiedPropertiesWithoutUndo();
+
+        var cso = new SerializedObject(canvas);
+        cso.FindProperty("stickerButton").objectReferenceValue = button;
+        cso.FindProperty("stickers").objectReferenceValue = stickers;
+        cso.ApplyModifiedPropertiesWithoutUndo();
     }
 
     /// <summary>Fading pencil marks for the walls next to the player (between the grid and the ink).</summary>
@@ -143,7 +190,7 @@ public static class MapDrawingBuilder
     {
         Transform oldFrame = mapArea.Find("MapFrame");
         if (oldFrame != null) Undo.DestroyObjectImmediate(oldFrame.gameObject);
-        foreach (string name in new[] { "Pen Button", "Eraser Button", "Wall Button", "Compass Rose" })
+        foreach (string name in new[] { "Pen Button", "Eraser Button", "Wall Button", "Sticker Button", "Compass Rose" })
         {
             Transform old = toolBar.Find(name);
             if (old != null) Undo.DestroyObjectImmediate(old.gameObject);

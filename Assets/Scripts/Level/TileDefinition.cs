@@ -25,6 +25,19 @@ public class TileDefinition : ScriptableObject
         FakeWall = 3,
         /// <summary>The location to find: face it and press Interact, then return to the start to complete it.</summary>
         Objective = 4,
+        /// <summary>A landmark (door, shop, fountain...): face it and press Interact to hear what it has to say.
+        /// Its text lives on the Landmark component of the tile's prefab.</summary>
+        Landmark = 5,
+    }
+
+    /// <summary>Where the tile's prefab goes in its cell.</summary>
+    public enum PropPlacement
+    {
+        /// <summary>Cell centre, facing the cell's north edge.</summary>
+        CellCenter,
+        /// <summary>Facing the first walkable neighbour (N, E, S, W). On a solid tile the prop hugs that wall face,
+        /// its back against the building; on an open tile it stands in the middle of the cell.</summary>
+        FaceStreet,
     }
 
     [Tooltip("Name shown in the level painter. Leave empty to use the asset name.")]
@@ -43,6 +56,10 @@ public class TileDefinition : ScriptableObject
     [Tooltip("Optional prop spawned at the cell center on the ground (door frame, stairs, fountain, stall...). " +
              "It faces the cell's north edge. For solid tiles it sits at the building's base.")]
     [SerializeField] private GameObject prefab;
+
+    [Tooltip("Cell Center: middle of the cell, facing north. Face Street: turned toward the walkable neighbour; on a " +
+             "solid tile it hugs that wall face (pivot = back of the prop, against the wall).")]
+    [SerializeField] private PropPlacement placement = PropPlacement.CellCenter;
 
     [Tooltip("Open tiles only: generate ground in this cell.")]
     [SerializeField] private bool hasFloor = true;
@@ -72,6 +89,8 @@ public class TileDefinition : ScriptableObject
     public bool IsFakeWall => behavior == TileBehavior.FakeWall;
     public bool IsWalkable => IsFakeWall || (shape == TileShape.Open && !blocksMovement);
     public GameObject Prefab => prefab;
+    public PropPlacement Placement => placement;
+    public bool IsLandmark => behavior == TileBehavior.Landmark;
     public bool HasFloor => hasFloor;
     public bool Covered => covered;
     public GameObject Archway => archway;
@@ -92,6 +111,13 @@ public class TileDefinition : ScriptableObject
         behavior = tileBehavior;
         blocksMovement = blocks;
         disguiseAs = disguise;
+    }
+
+    /// <summary>Editor helper: the tile's prop and how it's placed.</summary>
+    public void EditorSetProp(GameObject propPrefab, PropPlacement propPlacement)
+    {
+        prefab = propPrefab;
+        placement = propPlacement;
     }
 #endif
 }

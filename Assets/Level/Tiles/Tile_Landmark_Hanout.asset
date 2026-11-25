@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d861e559bd2526c4f87826c5cca27267, type: 3}
+  m_Name: Tile_Landmark_Hanout
+  m_EditorClassIdentifier: Assembly-CSharp::TileDefinition
+  displayName: 'Landmark: Hanout'
+  editorColor: {r: 0.62, g: 0.4, b: 0.85, a: 1}
+  shape: 1
+  behavior: 5
+  blocksMovement: 0
+  prefab: {fileID: 8509866735974385415, guid: 0f66b2407f2f29c42bfe35c1a9e37328, type: 3}
+  placement: 1
+  hasFloor: 1
+  covered: 0
+  archway: {fileID: 0}
+  storiesOverride: 0
+  disguiseAs: {fileID: 0}
+  disguiseTint: {r: 1, g: 0.9, b: 0.88, a: 1}

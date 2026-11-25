@@ -19,6 +19,18 @@ public class PlayerInteractor : MonoBehaviour
     /// </summary>
     public static event System.Action<Vector2Int, Vector2Int> InteractPressed;
 
+    /// <summary>
+    /// Extra things to interact with that aren't level tiles (e.g. the return beacon): given the cell faced and the
+    /// cell stood on, return the prompt to show ("Head home"), or null. Registered by whoever owns them.
+    /// </summary>
+    public static readonly System.Collections.Generic.List<System.Func<Vector2Int, Vector2Int, string>> PromptProviders =
+        new System.Collections.Generic.List<System.Func<Vector2Int, Vector2Int, string>>();
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics() => PromptProviders.Clear();
+
+    public GridPlayerController Player => _player;
+
     private GridPlayerController _player;
     private InputAction _interact;
 
@@ -54,6 +66,34 @@ public class PlayerInteractor : MonoBehaviour
         TryInteract();
     }
 
+    /// <summary>
+    /// What pressing Interact would do right now ("Examine Door"), or null if there's nothing to interact with.
+    /// Null too while the player can't act (moving, a message open, a menu open).
+    /// </summary>
+    public string CurrentPrompt()
+    {
+        LevelData level = _player != null ? _player.Level : null;
+        if (level == null || _player.IsBusy || GameInputLock.IsLocked) return null;
+        if (MessageBox.Instance != null && MessageBox.Instance.IsOpen) return null;
+
+        Vector2Int target = _player.FacingCell;
+        foreach (var provider in PromptProviders)
+        {
+            string extra = provider(target, _player.Cell);
+            if (!string.IsNullOrEmpty(extra)) return extra;
+        }
+        TileDefinition tile = level.GetTile(target);
+        if (tile == null) return null;
+        if (tile.IsLandmark)
+        {
+            Landmark landmark = Landmark.At(target);
+            return landmark != null ? landmark.Prompt : null;
+        }
+        if (tile.Behavior == TileDefinition.TileBehavior.Objective)
+            return "Examine " + (string.IsNullOrEmpty(level.ObjectiveName) ? "it" : level.ObjectiveName);
+        return null;
+    }
+
     /// <summary>Interact with the tile in front of the player. Returns true if it's interactable.</summary>
     public bool TryInteract()
     {
@@ -62,6 +102,13 @@ public class PlayerInteractor : MonoBehaviour
         Vector2Int target = _player.FacingCell;
         InteractPressed?.Invoke(target, _player.Cell);
         TileDefinition tile = level.GetTile(target);
+        if (tile != null && tile.IsLandmark)
+        {
+            Landmark landmark = Landmark.At(target);
+            if (landmark == null) return false;
+            landmark.Interact();
+            return true;
+        }
         if (tile == null || tile.Behavior != TileDefinition.TileBehavior.Objective) return false;
         Interacted?.Invoke(target, tile);
         return true;
