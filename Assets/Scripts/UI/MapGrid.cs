@@ -32,10 +32,10 @@ public class MapGrid : MonoBehaviour
 
     [Header("Grid")]
     [SerializeField] private RawImage gridImage;
-    [SerializeField] private Color lineColor = new Color(0.36f, 0.26f, 0.16f, 0.10f);
+    [SerializeField] private Color lineColor = new Color(0.36f, 0.26f, 0.16f, 0.15625f);
     [Tooltip("Every Nth line is drawn a bit stronger, for counting. 0 = off.")]
     [SerializeField, Min(0)] private int majorEvery = 5;
-    [SerializeField] private Color majorLineColor = new Color(0.36f, 0.26f, 0.16f, 0.17f);
+    [SerializeField] private Color majorLineColor = new Color(0.36f, 0.26f, 0.16f, 0.265625f);
 
     [Header("Start Point")]
     [Tooltip("Layer drawn above the ink, so the start mark is never hidden or erased.")]

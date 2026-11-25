@@ -1,18 +1,21 @@
+using PrimeTween;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 /// <summary>
-/// Freehand pixel drawing on the cartography map, like the pencil in Paint, with a weighted brush:
-/// the brush trails the cursor with some inertia (smooths shaky strokes) and draws at a constant size.
+/// Freehand pixel drawing on the cartography map. The pen is a neon highlighter with a chisel tip that blends over
+/// the paper and the walls, with a weighted brush: it trails the cursor with some inertia (smooths shaky strokes)
+/// and draws at a constant size.
 /// Sits on a transparent "ink" RawImage over the generated grid, so the eraser only removes ink.
 /// Left mouse draws with the current tool, right mouse always erases. Drawing throws off pixel particles.
-/// Built by Tools > Dungeon > Create Map Drawing.
+/// The Wall tool fills a whole grid cell with solid ink per click (drag to paint a run of cells); right-click
+/// clears a whole cell. Built by Tools > Dungeon > Create Map Drawing.
 /// </summary>
 [RequireComponent(typeof(RawImage))]
 public class MapCanvas : MonoBehaviour
 {
-    public enum Tool { Pen, Eraser }
+    public enum Tool { Pen, Eraser, Wall }
 
     [Header("Canvas")]
     [Tooltip("Ink resolution comes from this grid so lines up with its cells. Found in the parent if empty.")]
@@ -23,21 +26,39 @@ public class MapCanvas : MonoBehaviour
     [Header("Weighted Brush")]
     [Tooltip("How heavy the brush feels. 0 = sticks to the cursor, 0.9 = drags far behind (very smooth lines).")]
     [SerializeField, Range(0f, 0.95f)] private float weight = 0.55f;
-    [Tooltip("Off = the pen always draws at Pen Radius. On = thinner when moving fast (pressure-like).")]
-    [SerializeField] private bool speedChangesSize = false;
-    [Tooltip("Brush speed (ink pixels per second) at which the line is at its thinnest (only if speed changes size).")]
-    [SerializeField, Min(1f)] private float speedForThinnest = 220f;
 
-    [Header("Pen")]
-    [Tooltip("Sepia ink, readable on the paper.")]
-    [SerializeField] private Color penColor = new Color(0.20f, 0.13f, 0.08f);
-    [Tooltip("Pen size in ink pixels (radius). Used for the whole stroke.")]
-    [SerializeField, Range(0, 8)] private int penRadiusSlow = 1;
-    [Tooltip("Only if speed changes size: radius when moving fast.")]
-    [SerializeField, Range(0, 8)] private int penRadiusFast = 0;
+    [Header("Pen (highlighter)")]
+    [Tooltip("Electric cyan: nothing else on the map is this colour, so it pops off both the parchment and the dark walls.")]
+    [SerializeField] private Color highlighterColor = new Color(0.0f, 0.95f, 1.0f);
+    [Tooltip("1 = opaque. Lower lets the paper and walls show through like a real highlighter.")]
+    [SerializeField, Range(0.3f, 1f)] private float highlighterAlpha = 0.78f;
+    [Tooltip("Half-width of the chisel tip in ink pixels (the tip is twice as wide as it is tall).")]
+    [SerializeField, Range(1, 8)] private int highlighterRadius = 3;
 
     [Header("Eraser")]
     [SerializeField, Range(0, 12)] private int eraserRadius = 3;
+
+    [Header("Wall Paint (hand-inked look)")]
+    [Tooltip("Base ink wash of a wall cell.")]
+    [SerializeField] private Color wallWash = new Color(0.34f, 0.24f, 0.15f);
+    [Tooltip("Darker ink: the pencil hatching and the outline along exposed edges.")]
+    [SerializeField] private Color wallHatch = new Color(0.14f, 0.09f, 0.05f);
+    [Tooltip("Per-pixel ink grain.")]
+    [SerializeField, Range(0f, 0.3f)] private float wallGrain = 0.12f;
+    [Tooltip("How ragged the outline is where a wall meets open floor (chance of a missing edge pixel).")]
+    [SerializeField, Range(0f, 0.6f)] private float wallRoughEdge = 0.3f;
+    [Tooltip("Share of pixels where the paper shows through the ink.")]
+    [SerializeField, Range(0f, 0.3f)] private float wallSpeckle = 0.08f;
+
+    [Header("Wall Juice")]
+    [SerializeField] private bool wallJuice = true;
+    [Tooltip("Particles thrown when a cell is filled or cleared.")]
+    [SerializeField, Range(0, 24)] private int wallBurst = 8;
+    [Tooltip("A dark stamp lands on the cell: starts this much bigger, settles to 1 with a bounce.")]
+    [SerializeField, Range(1f, 2.5f)] private float stampOvershoot = 1.55f;
+    [SerializeField, Min(0.05f)] private float stampDuration = 0.28f;
+    [Tooltip("Tiny thump of the whole map when a wall lands. 0 = off.")]
+    [SerializeField, Range(0f, 0.04f)] private float mapPunch = 0.012f;
 
     [Header("Particles")]
     [SerializeField] private MapParticles particles;
@@ -48,6 +69,7 @@ public class MapCanvas : MonoBehaviour
     [Header("Tool Buttons (optional)")]
     [SerializeField] private Button penButton;
     [SerializeField] private Button eraserButton;
+    [SerializeField] private Button wallButton;
     [SerializeField] private Color buttonNormal = new Color(0.25f, 0.19f, 0.13f);
     [SerializeField] private Color buttonSelected = new Color(0.93f, 0.84f, 0.68f);
     [SerializeField] private Color labelNormal = new Color(0.93f, 0.84f, 0.68f);
@@ -68,6 +90,23 @@ public class MapCanvas : MonoBehaviour
     private Vector2 _target;
     private float _particleDebt;
 
+    // Wall paint state: the last cell touched this stroke, so a drag fills each cell once.
+    private bool _wallStroke;
+    private Vector2Int _lastWallCell;
+    private int[] _strokeMark;            // stroke id per pixel: a highlighter stroke blends each pixel only once
+    private int _strokeId;
+    private bool[] _wall;                // which cells are walls (drives the ragged edges)
+    private int _cols, _rows;
+
+    // Juice.
+    private const int StampPool = 16;
+    private Image[] _stamps;
+    private Tween[] _stampTweens;
+    private int _nextStamp;
+    private Tween _punch;
+    private bool _toolsReady;
+    private System.Action<Image, float> _paintStep, _eraseStep;
+
     private static readonly Color32 Clear = new Color32(0, 0, 0, 0);
 
     private void Awake()
@@ -83,12 +122,20 @@ public class MapCanvas : MonoBehaviour
             wrapMode = TextureWrapMode.Clamp,
         };
         _pixels = new Color32[_res.x * _res.y];
+        _strokeMark = new int[_res.x * _res.y];
+        int cp = CellPixels;
+        _cols = grid != null ? grid.Columns : (_res.x - 1) / cp;
+        _rows = grid != null ? grid.Rows : (_res.y - 1) / cp;
+        _wall = new bool[_cols * _rows];
         ClearInk();
         _image.texture = _texture;
+        BuildStamps();
 
         if (penButton != null) penButton.onClick.AddListener(() => SetTool(Tool.Pen));
         if (eraserButton != null) eraserButton.onClick.AddListener(() => SetTool(Tool.Eraser));
+        if (wallButton != null) wallButton.onClick.AddListener(() => SetTool(Tool.Wall));
         SetTool(Tool.Pen);
+        _toolsReady = true; // button pulses only for the player's own clicks
     }
 
     private void Start()
@@ -99,20 +146,27 @@ public class MapCanvas : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (_punch.isAlive) _punch.Stop();
+        if (_stampTweens != null)
+            foreach (Tween t in _stampTweens) if (t.isAlive) t.Stop();
         if (_texture != null) Destroy(_texture);
     }
 
     public void SetTool(Tool tool)
     {
+        bool changed = tool != CurrentTool;
         CurrentTool = tool;
+        if (changed) PulseButton(tool == Tool.Pen ? penButton : tool == Tool.Eraser ? eraserButton : wallButton);
         Highlight(penButton, tool == Tool.Pen);
         Highlight(eraserButton, tool == Tool.Eraser);
+        Highlight(wallButton, tool == Tool.Wall);
     }
 
     /// <summary>Wipe all ink (the grid underneath is untouched).</summary>
     public void ClearInk()
     {
         for (int i = 0; i < _pixels.Length; i++) _pixels[i] = Clear;
+        if (_wall != null) System.Array.Clear(_wall, 0, _wall.Length);
         _dirty = true;
     }
 
@@ -137,7 +191,19 @@ public class MapCanvas : MonoBehaviour
             // A stroke only starts on a fresh press inside the map.
             bool fresh = mouse.leftButton.wasPressedThisFrame || mouse.rightButton.wasPressedThisFrame;
             if (!fresh || !Inside(cursor)) return;
-            BeginStroke(cursor, mouse.rightButton.isPressed || CurrentTool == Tool.Eraser);
+            bool rightClick = mouse.rightButton.isPressed;
+            if (CurrentTool == Tool.Wall) BeginWallStroke(cursor, rightClick);
+            else BeginStroke(cursor, rightClick || CurrentTool == Tool.Eraser);
+            return;
+        }
+
+        if (_wallStroke)
+        {
+            // Wall paint: every new cell the cursor enters gets filled (or cleared with right mouse).
+            if (!held) { _stroking = _wallStroke = false; return; }
+            Vector2 at = ClampToCanvas(cursor);
+            Vector2Int cell = CellAt(at);
+            if (cell != _lastWallCell) PaintWallCell(cell, at, _strokeErases);
             return;
         }
 
@@ -161,10 +227,247 @@ public class MapCanvas : MonoBehaviour
     {
         _stroking = true;
         _strokeErases = erase;
+        _strokeId++;
         _brush = _target = at;
         _particleDebt = 0f;
-        Stamp(Round(at), erase ? eraserRadius : penRadiusSlow);
+        Stamp(Round(at), erase ? eraserRadius : highlighterRadius);
         Burst(at, 4);
+    }
+
+    // ------------------------------------------------------------------ wall paint
+
+    private void BeginWallStroke(Vector2 at, bool erase)
+    {
+        _stroking = _wallStroke = _wallFirst = true;
+        _strokeErases = erase;
+        PaintWallCell(CellAt(at), at, erase);
+    }
+
+    private void PaintWallCell(Vector2Int cell, Vector2 inkPos, bool erase)
+    {
+        bool firstOfStroke = _wallFirst;
+        _wallFirst = false;
+        _lastWallCell = cell;
+
+        _wall[cell.y * _cols + cell.x] = !erase;
+        if (erase) ClearCellPixels(cell);
+        else RenderWallCell(cell);
+
+        // Neighbours' exposed edges just changed (a wall next to a wall has no outline between them), so redraw them.
+        for (int i = 0; i < 4; i++)
+        {
+            Vector2Int n = cell + Neighbour[i];
+            if (IsWall(n.x, n.y)) RenderWallCell(n);
+        }
+        _dirty = true;
+
+        if (wallJuice) WallJuice(cell, erase, firstOfStroke);
+    }
+
+    private static readonly Vector2Int[] Neighbour =
+        { Vector2Int.left, Vector2Int.right, Vector2Int.down, Vector2Int.up };
+
+    private bool _wallFirst; // the next painted cell is the first of a stroke (a click gets the bigger thump)
+
+    private bool IsWall(int cx, int cy) => cx >= 0 && cy >= 0 && cx < _cols && cy < _rows && _wall[cy * _cols + cx];
+
+    /// <summary>Wipes a cell's pixels, including its border lines (neighbouring walls redraw their own edges).</summary>
+    private void ClearCellPixels(Vector2Int cell)
+    {
+        int cp = CellPixels;
+        for (int y = cell.y * cp; y <= (cell.y + 1) * cp; y++)
+        for (int x = cell.x * cp; x <= (cell.x + 1) * cp; x++)
+        {
+            if (x < 0 || y < 0 || x >= _res.x || y >= _res.y) continue;
+            _pixels[y * _res.x + x] = Clear;
+        }
+    }
+
+    /// <summary>
+    /// Draws one wall cell like hand-inked cartography: an ink wash with grain, pencil hatching (direction and spacing
+    /// vary per cell), paper specks, and a darker, ragged outline wherever the wall meets open floor. Everything is
+    /// derived from the cell/pixel coordinates, so a cell always looks the same however often it is redrawn.
+    /// </summary>
+    private void RenderWallCell(Vector2Int cell)
+    {
+        int cp = CellPixels;
+        uint seed = Hash(cell.x, cell.y, 17u);
+        bool slashHatch = (seed & 1u) == 0u;
+        int spacing = ((seed >> 1) & 1u) == 0u ? 3 : 4;
+        int phase = (int)((seed >> 2) % (uint)spacing);
+
+        bool openL = !IsWall(cell.x - 1, cell.y), openR = !IsWall(cell.x + 1, cell.y);
+        bool openD = !IsWall(cell.x, cell.y - 1), openU = !IsWall(cell.x, cell.y + 1);
+
+        for (int ly = 0; ly <= cp; ly++)
+        for (int lx = 0; lx <= cp; lx++)
+        {
+            int x = cell.x * cp + lx, y = cell.y * cp + ly;
+            if (x >= _res.x || y >= _res.y) continue;
+
+            // Distance (in pixels) to the nearest edge that borders open floor; large if the cell is fully enclosed.
+            int d = 99;
+            if (openL) d = Mathf.Min(d, lx);
+            if (openR) d = Mathf.Min(d, cp - lx);
+            if (openD) d = Mathf.Min(d, ly);
+            if (openU) d = Mathf.Min(d, cp - ly);
+
+            uint n = Hash(x, y, 91u);
+            float r = (n & 0xFFFFu) / 65535f;                 // edge / speck randomness
+            float g = ((n >> 16) & 0xFFu) / 255f;             // grain
+
+            // Ragged ink edge: pixels along an exposed edge go missing, and fewer just inside it.
+            if ((d == 0 && r < wallRoughEdge) || (d == 1 && r < wallRoughEdge * 0.3f))
+            {
+                _pixels[y * _res.x + x] = Clear;
+                continue;
+            }
+
+            float grain = 1f + (g - 0.5f) * 2f * wallGrain;
+            Color c = new Color(wallWash.r * grain, wallWash.g * grain, wallWash.b * grain, 1f);
+
+            int h = slashHatch ? lx + ly : lx - ly + cp;      // diagonal pencil strokes
+            if ((h + phase) % spacing == 0) c = Color.Lerp(c, wallHatch, 0.85f);
+            if (d == 0) c = Color.Lerp(c, wallHatch, 0.7f);   // ink pools along the outline
+
+            // Paper showing through the ink.
+            if (r > 1f - wallSpeckle) c.a = 0.35f + g * 0.3f;
+
+            _pixels[y * _res.x + x] = c;
+        }
+    }
+
+    private static uint Hash(int x, int y, uint salt)
+    {
+        unchecked
+        {
+            uint h = (uint)x * 374761393u + (uint)y * 668265263u + salt * 2246822519u;
+            h = (h ^ (h >> 13)) * 1274126177u;
+            return h ^ (h >> 16);
+        }
+    }
+
+    // ------------------------------------------------------------------ wall juice
+
+    private void WallJuice(Vector2Int cell, bool erase, bool firstOfStroke)
+    {
+        SpawnStamp(cell, erase);
+        PunchMap(firstOfStroke ? mapPunch : mapPunch * 0.45f);
+        WallDebris(cell, erase);
+    }
+
+    /// <summary>A pooled overlay that stamps down on the cell (paint) or crumbles away (erase).</summary>
+    private void BuildStamps()
+    {
+        _paintStep = StampPaintStep;
+        _eraseStep = StampEraseStep;
+        _stamps = new Image[StampPool];
+        _stampTweens = new Tween[StampPool];
+        for (int i = 0; i < StampPool; i++)
+        {
+            var go = new GameObject("Wall Stamp", typeof(RectTransform), typeof(Image));
+            go.hideFlags = HideFlags.DontSave;
+            go.layer = gameObject.layer;
+            var rt = (RectTransform)go.transform;
+            rt.SetParent(transform, false);
+            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
+            var img = go.GetComponent<Image>();
+            img.raycastTarget = false;
+            go.SetActive(false);
+            _stamps[i] = img;
+        }
+    }
+
+    private void SpawnStamp(Vector2Int cell, bool erase)
+    {
+        int i = _nextStamp;
+        _nextStamp = (_nextStamp + 1) % StampPool;
+        if (_stampTweens[i].isAlive) _stampTweens[i].Stop();
+
+        int cp = CellPixels;
+        float px = ((RectTransform)transform).rect.width / _res.x;
+        Image img = _stamps[i];
+        RectTransform rt = img.rectTransform;
+        rt.anchoredPosition = InkToLocal(new Vector2((cell.x + 0.5f) * cp, (cell.y + 0.5f) * cp));
+        rt.sizeDelta = Vector2.one * ((cp + 1) * px);
+        float start = erase ? 1f : stampOvershoot;
+        rt.localScale = new Vector3(start, start, 1f);
+        Color c = erase ? eraserCrumbColor : wallHatch;
+        c.a = erase ? 0.7f : 0.6f;
+        img.color = c;
+        img.gameObject.SetActive(true);
+
+        // OutBack on the stamp makes it land a touch small and spring back: a squash-and-settle.
+        _stampTweens[i] = Tween.Custom(img, 0f, 1f, stampDuration, erase ? _eraseStep : _paintStep,
+                erase ? Ease.OutQuad : Ease.OutBack, useUnscaledTime: true)
+            .OnComplete(img, im => im.gameObject.SetActive(false));
+    }
+
+    private void StampPaintStep(Image im, float t)
+    {
+        float s = Mathf.LerpUnclamped(stampOvershoot, 1f, t);
+        im.rectTransform.localScale = new Vector3(s, s, 1f);
+        Color c = im.color;
+        c.a = 0.6f * Mathf.Clamp01(1f - t * 1.15f);
+        im.color = c;
+    }
+
+    private void StampEraseStep(Image im, float t)
+    {
+        float s = Mathf.Lerp(1f, 0.45f, t);
+        im.rectTransform.localScale = new Vector3(s, s, 1f);
+        Color c = im.color;
+        c.a = 0.7f * Mathf.Clamp01(1f - t);
+        im.color = c;
+    }
+
+    /// <summary>The whole map gives a little thump when a wall lands.</summary>
+    private void PunchMap(float strength)
+    {
+        if (strength <= 0f || grid == null) return;
+        Transform t = grid.transform;
+        if (_punch.isAlive) { _punch.Stop(); t.localScale = Vector3.one; }
+        _punch = Tween.PunchScale(t, new Vector3(strength, strength, 0f), 0.16f, frequency: 12f, useUnscaledTime: true);
+    }
+
+    /// <summary>Chips of ink and paper dust flying out of the cell (crumbs on erase).</summary>
+    private void WallDebris(Vector2Int cell, bool erase)
+    {
+        if (particles == null || wallBurst <= 0) return;
+        int cp = CellPixels;
+        float px = particles.PixelSize;
+        for (int i = 0; i < wallBurst; i++)
+        {
+            Vector2 inCell = new Vector2((cell.x + Random.value) * cp, (cell.y + Random.value) * cp);
+            Vector2 center = new Vector2((cell.x + 0.5f) * cp, (cell.y + 0.5f) * cp);
+            Vector2 dir = (inCell - center).sqrMagnitude < 0.01f ? Random.insideUnitCircle.normalized : (inCell - center).normalized;
+            Vector2 vel = dir * Random.Range(12f, 30f) * px;
+            Color c;
+            if (erase) c = Random.value < 0.5f ? eraserCrumbColor : new Color(0.93f, 0.86f, 0.68f, 0.95f);
+            else c = Random.value < 0.55f ? Color.Lerp(wallWash, wallHatch, Random.value)
+                                          : new Color(0.93f, 0.86f, 0.68f, 0.9f); // pale paper dust
+            particles.Emit(InkToLocal(inCell), vel, c, Random.Range(0.25f, 0.55f), 55f * px, Random.value < 0.3f ? 2 : 1);
+        }
+    }
+
+    private void PulseButton(Button b)
+    {
+        if (!_toolsReady || b == null) return;
+        Tween.StopAll(b.transform);
+        b.transform.localScale = Vector3.one;
+        Tween.PunchScale(b.transform, Vector3.one * 0.16f, 0.3f, frequency: 8f, useUnscaledTime: true);
+    }
+
+    private int CellPixels => grid != null ? grid.CellPixels : 10;
+
+    /// <summary>The grid cell under an ink-pixel position (the last pixel line belongs to the last cell).</summary>
+    private Vector2Int CellAt(Vector2 ink)
+    {
+        int cp = CellPixels;
+        int cols = grid != null ? grid.Columns : (_res.x - 1) / cp;
+        int rows = grid != null ? grid.Rows : (_res.y - 1) / cp;
+        return new Vector2Int(Mathf.Clamp(Mathf.FloorToInt(ink.x / cp), 0, cols - 1),
+                              Mathf.Clamp(Mathf.FloorToInt(ink.y / cp), 0, rows - 1));
     }
 
     private void MoveBrushTo(Vector2 next, float dt)
@@ -172,17 +475,7 @@ public class MapCanvas : MonoBehaviour
         float dist = Vector2.Distance(_brush, next);
         if (dist < 0.01f) return;
 
-        // Constant pen size (optionally thinner when moving fast).
-        int radius = eraserRadius;
-        if (!_strokeErases)
-        {
-            radius = penRadiusSlow;
-            if (speedChangesSize)
-            {
-                float speed01 = Mathf.Clamp01(dist / dt / speedForThinnest);
-                radius = Mathf.RoundToInt(Mathf.Lerp(penRadiusSlow, penRadiusFast, speed01));
-            }
-        }
+        int radius = _strokeErases ? eraserRadius : highlighterRadius;
 
         DrawLine(Round(_brush), Round(next), radius);
         EmitAlong(_brush, next, dist);
@@ -217,17 +510,48 @@ public class MapCanvas : MonoBehaviour
 
     private void Stamp(Vector2Int c, int r)
     {
-        Color32 color = _strokeErases ? Clear : (Color32)penColor;
-        int r2 = r * r + r; // slightly fuller circles at small radii
-        for (int y = -r; y <= r; y++)
-        for (int x = -r; x <= r; x++)
+        if (_strokeErases)
         {
-            if (x * x + y * y > r2) continue;
-            int px = c.x + x, py = c.y + y;
-            if (px < 0 || py < 0 || px >= _res.x || py >= _res.y) continue;
-            _pixels[py * _res.x + px] = color;
+            int r2 = r * r + r; // slightly fuller circles at small radii
+            for (int y = -r; y <= r; y++)
+            for (int x = -r; x <= r; x++)
+            {
+                if (x * x + y * y > r2) continue;
+                int px = c.x + x, py = c.y + y;
+                if (px < 0 || py < 0 || px >= _res.x || py >= _res.y) continue;
+                _pixels[py * _res.x + px] = Clear;
+            }
+        }
+        else
+        {
+            // Chisel tip: twice as wide as tall. Blended over what's there (once per pixel per stroke), so the
+            // highlighter lets the paper and the walls show through instead of hiding them.
+            int hy = Mathf.Max(1, r / 2);
+            for (int y = -hy; y <= hy; y++)
+            for (int x = -r; x <= r; x++)
+            {
+                int px = c.x + x, py = c.y + y;
+                if (px < 0 || py < 0 || px >= _res.x || py >= _res.y) continue;
+                int i = py * _res.x + px;
+                if (_strokeMark[i] == _strokeId) continue;
+                _strokeMark[i] = _strokeId;
+                _pixels[i] = Over(_pixels[i], highlighterColor, highlighterAlpha);
+            }
         }
         _dirty = true;
+    }
+
+    /// <summary>Straight-alpha "source over" of a colour onto an existing ink pixel.</summary>
+    private static Color32 Over(Color32 dst, Color src, float a)
+    {
+        float da = dst.a / 255f;
+        float outA = a + da * (1f - a);
+        float k = da * (1f - a);
+        return new Color32(
+            (byte)Mathf.RoundToInt((src.r * a + dst.r / 255f * k) / outA * 255f),
+            (byte)Mathf.RoundToInt((src.g * a + dst.g / 255f * k) / outA * 255f),
+            (byte)Mathf.RoundToInt((src.b * a + dst.b / 255f * k) / outA * 255f),
+            (byte)Mathf.RoundToInt(outA * 255f));
     }
 
     // ------------------------------------------------------------------ particles
@@ -262,9 +586,9 @@ public class MapCanvas : MonoBehaviour
         }
         else
         {
-            // Ink droplets / sparkle: flicked off the nib, slight drift, quick fade.
+            // Neon sparkle: flicked off the tip, slight drift, quick fade; some motes glow white-hot.
             Vector2 vel = (Random.insideUnitCircle * 10f - strokeDir * 4f) * px;
-            Color c = penColor;
+            Color c = Random.value < 0.3f ? Color.Lerp(highlighterColor, Color.white, 0.7f) : highlighterColor;
             c.a = Random.Range(0.6f, 1f);
             particles.Emit(local, vel, c, Random.Range(0.25f, 0.5f), 12f * px, 1);
         }

@@ -5,7 +5,7 @@ using B = SettingsMenuBuilder;
 
 /// <summary>
 /// Turns the side panel's MapArea into the freehand cartography map:
-/// generated paper + subtle grid with the start point + ink layer + pixel particles, with Pen / Eraser buttons on the tool bar.
+/// generated paper + subtle grid with the start point + ink layer + pixel particles, with Pen / Eraser / Wall buttons on the tool bar.
 /// Running it again rebuilds the map (existing map objects and tool buttons are replaced).
 /// </summary>
 public static class MapDrawingBuilder
@@ -70,6 +70,8 @@ public static class MapDrawingBuilder
         Place((RectTransform)pen.transform, 18);
         Button eraser = B.CreateButton(toolBar, font, "Eraser", new Vector2(130, 64));
         Place((RectTransform)eraser.transform, 18 + 130 + 14);
+        Button wall = B.CreateButton(toolBar, font, "Wall", new Vector2(130, 64));
+        Place((RectTransform)wall.transform, 18 + 2 * (130 + 14));
 
         AddCompassRose(toolBar);
 
@@ -87,6 +89,7 @@ public static class MapDrawingBuilder
         so.FindProperty("particles").objectReferenceValue = particles;
         so.FindProperty("penButton").objectReferenceValue = pen;
         so.FindProperty("eraserButton").objectReferenceValue = eraser;
+        so.FindProperty("wallButton").objectReferenceValue = wall;
         so.ApplyModifiedPropertiesWithoutUndo();
 
         Selection.activeGameObject = ink.gameObject;
@@ -124,7 +127,7 @@ public static class MapDrawingBuilder
     {
         Transform oldFrame = mapArea.Find("MapFrame");
         if (oldFrame != null) Undo.DestroyObjectImmediate(oldFrame.gameObject);
-        foreach (string name in new[] { "Pen Button", "Eraser Button", "Compass Rose" })
+        foreach (string name in new[] { "Pen Button", "Eraser Button", "Wall Button", "Compass Rose" })
         {
             Transform old = toolBar.Find(name);
             if (old != null) Undo.DestroyObjectImmediate(old.gameObject);
