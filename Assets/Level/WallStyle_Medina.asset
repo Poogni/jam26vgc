@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 797478c53d1a25f4eb67e47ee50b6bc4, type: 3}
+  m_Name: WallStyle_Medina
+  m_EditorClassIdentifier: Assembly-CSharp::WallStyle
+  seamlessMaterial: {fileID: 2100000, guid: a52e514916c788d45ae90c740153e94d, type: 2}
+  wallVariants:
+  - {fileID: 2100000, guid: c2d28d2aeb0b0214a834bbc647670711, type: 2}
+  - {fileID: 2100000, guid: 55720e7fef7196b48b6acb621d8bd326, type: 2}
+  - {fileID: 2100000, guid: c442a1aa9dd83e94c9d2d51d299974b7, type: 2}
+  textureSize: 4
+  bottomDecals:
+  - {fileID: 2100000, guid: f65f9e8a21b073e49966de4cf1e3f271, type: 2}
+  - {fileID: 2100000, guid: 0d21d4e3ec62e80419c39e509c3b0bdf, type: 2}
+  - {fileID: 2100000, guid: d7232358fe51b7244bff07dcb9d22215, type: 2}
+  - {fileID: 2100000, guid: 3351f6c6528f8854a90e39819703d3ee, type: 2}
+  - {fileID: 2100000, guid: 86f4d3cc7b6ee2c44a99993863bd4675, type: 2}
+  - {fileID: 2100000, guid: 2aa50b2e59235e54797d978bdabc996e, type: 2}
+  bottomChance: 0.75
+  bottomHeight: 1.7
+  midDecals:
+  - {fileID: 2100000, guid: 65cbe78a3a2e7a143a468eaf8960860f, type: 2}
+  midChance: 0.45
+  midSize: 1.4
+  topDecals:
+  - {fileID: 2100000, guid: 1421e21efb017094abdb7e6d8198ee92, type: 2}
+  - {fileID: 2100000, guid: 8202d576227593c4db0096369f3110f0, type: 2}
+  - {fileID: 2100000, guid: 1e8ad8c3567d320429100beccfe02ffb, type: 2}
+  topChance: 0.65
+  topHeight: 1.5
+  offset: 0.015
+  maxWidthOfWall: 1

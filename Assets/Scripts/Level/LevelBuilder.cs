@@ -69,6 +69,16 @@ public class LevelBuilder : MonoBehaviour
         var fakeWalls = new Dictionary<TileDefinition, MeshBuilder>();
         MeshBuilder hiddenGround = new MeshBuilder(); // ground inside fake walls
 
+        // Textured walls: one mesh per wall variant (one draw call each), plus one per decal material.
+        WallStyle style = level.WallStyle;
+        bool styled = style != null && style.HasWalls;
+        bool seamless = styled && style.SeamlessMaterial != null;
+        // Seamless walls are one mesh / one material: the shader does the variation in world space.
+        int variants = !styled ? 0 : seamless ? 1 : style.WallVariants.Length;
+        var styledWalls = new Dictionary<int, MeshBuilder>();
+        var styledFakes = new Dictionary<(TileDefinition, int), MeshBuilder>();
+        var decals = new Dictionary<Material, MeshBuilder>();
+
         var q = new Vector3[4];
 
         // One cell past every edge so open cells on the border are still enclosed.
@@ -91,7 +101,12 @@ public class LevelBuilder : MonoBehaviour
             else if (IsExtruded(c))
             {
                 bool fake = tile != null && tile.IsFakeWall;
-                MeshBuilder mb = fake ? Get(fakeWalls, tile) : tile != null ? Get(walls, tile) : rockWalls;
+                var rng = new System.Random(CellSeed(c));
+                int variant = styled ? rng.Next(variants) : 0;
+                Vector2 uvOffset = new Vector2((float)rng.NextDouble(), (float)rng.NextDouble());
+                MeshBuilder mb = styled
+                    ? (fake ? Get(styledFakes, (tile, variant)) : Get(styledWalls, variant))
+                    : fake ? Get(fakeWalls, tile) : tile != null ? Get(walls, tile) : rockWalls;
                 if (fake) hiddenGround.Floor(q, 0f, up: true);
                 float h = level.BuildingHeight(c);
 
@@ -112,7 +127,16 @@ public class LevelBuilder : MonoBehaviour
                         2 => (q[0], q[1]), // South: SW -> SE
                         _ => (q[3], q[0]), // West:  NW -> SW
                     };
-                    mb.Wall(a, b, bottom, h);
+                    if (styled)
+                    {
+                        // Each face gets its own offset / mirror, so repeats never line up between faces.
+                        Vector2 faceOffset = uvOffset + new Vector2(side * 0.37f, side * 0.21f);
+                        mb.Wall(a, b, bottom, h, faceOffset, style.TextureSize, rng.NextDouble() < 0.5);
+                    }
+                    else mb.Wall(a, b, bottom, h);
+
+                    // Decals only on walls that face a street (that's where the player sees them).
+                    if (style != null && level.IsOpen(n)) AddDecals(style, decals, a, b, h, rng);
                 }
                 mb.Floor(q, h, up: true); // flat roof
             }
@@ -128,6 +152,19 @@ public class LevelBuilder : MonoBehaviour
         Emit(root, "Buildings - Rock", rockWalls, level.WallMaterial, RockColor);
         Emit(root, "Covered Roofs", roofs, level.WallMaterial, RoofColor);
         Emit(root, "Ground - Under Fake Walls", hiddenGround, level.GroundMaterial, GroundFallbackColor);
+        foreach (var kv in styledWalls)
+        {
+            Material m = seamless ? style.SeamlessMaterial : style.WallVariants[kv.Key];
+            Emit(root, $"Buildings - {m.name}", kv.Value, m, Color.white);
+        }
+        foreach (var kv in styledFakes)
+        {
+            Material m = seamless ? style.SeamlessMaterial : style.WallVariants[kv.Key.Item2];
+            Emit(root, $"Fake Walls - {kv.Key.Item1.Label} - {m.name}", kv.Value, m, kv.Key.Item1.DisguiseTint,
+                collider: false, alwaysTint: true);
+        }
+        foreach (var kv in decals)
+            Emit(root, $"Decals - {kv.Key.name}", kv.Value, kv.Key, Color.white, collider: false, shadows: false);
         foreach (var kv in fakeWalls)
         {
             // Rendered like the wall it imitates, slightly tinted, and with no collider.
@@ -179,14 +216,84 @@ public class LevelBuilder : MonoBehaviour
         return false;
     }
 
-    private static MeshBuilder Get(Dictionary<TileDefinition, MeshBuilder> map, TileDefinition tile)
+    private static MeshBuilder Get<TKey>(Dictionary<TKey, MeshBuilder> map, TKey key)
     {
-        if (!map.TryGetValue(tile, out MeshBuilder mb)) map[tile] = mb = new MeshBuilder();
+        if (!map.TryGetValue(key, out MeshBuilder mb)) map[key] = mb = new MeshBuilder();
         return mb;
     }
 
+    /// <summary>Repeatable per-cell random seed (same level + seed = same look every build).</summary>
+    private int CellSeed(Vector2Int c)
+    {
+        unchecked { return (c.x * 73856093) ^ (c.y * 19349663) ^ (level.Seed * 83492791); }
+    }
+
+    // ------------------------------------------------------------------ decals
+
+    /// <summary>Bottom (on the ground), top (from the roofline) and mid (on the body) decals for one wall face.</summary>
+    private static void AddDecals(WallStyle style, Dictionary<Material, MeshBuilder> decals,
+        Vector3 a, Vector3 b, float wallHeight, System.Random rng)
+    {
+        Vector3 along = b - a;
+        float len = along.magnitude;
+        if (len < 0.1f) return;
+        along /= len;
+        Vector3 normal = Vector3.Cross(Vector3.up, along); // outward, for counter-clockwise edges
+        float maxWidth = len * style.MaxWidthOfWall;
+
+        float bottomTop = 0f, topBottom = wallHeight;
+
+        if (Roll(rng, style.BottomChance, style.BottomDecals))
+        {
+            float hgt = Mathf.Min(style.BottomHeight, wallHeight);
+            if (PlaceDecal(style.BottomDecals, decals, a, along, normal, len, maxWidth, 0f, hgt, style.Offset, rng, out float top))
+                bottomTop = top;
+        }
+        if (Roll(rng, style.TopChance, style.TopDecals))
+        {
+            float hgt = Mathf.Min(style.TopHeight, wallHeight * 0.5f);
+            if (PlaceDecal(style.TopDecals, decals, a, along, normal, len, maxWidth, wallHeight - hgt, hgt, style.Offset * 1.5f, rng, out _))
+                topBottom = wallHeight - hgt;
+        }
+        if (Roll(rng, style.MidChance, style.MidDecals))
+        {
+            // Somewhere on the body, between the bottom and top decals when there's room.
+            float size = style.MidSize;
+            float lo = Mathf.Max(bottomTop * 0.6f, 0.4f), hi = Mathf.Min(topBottom, wallHeight) - size;
+            if (hi > lo)
+            {
+                float y = Mathf.Lerp(lo, hi, (float)rng.NextDouble());
+                PlaceDecal(style.MidDecals, decals, a, along, normal, len, maxWidth, y, size, style.Offset * 2f, rng, out _);
+            }
+        }
+    }
+
+    private static bool Roll(System.Random rng, float chance, Material[] set) =>
+        set != null && set.Length > 0 && rng.NextDouble() < chance;
+
+    private static bool PlaceDecal(Material[] set, Dictionary<Material, MeshBuilder> decals, Vector3 a, Vector3 along,
+        Vector3 normal, float faceLength, float maxWidth, float y0, float height, float offset, System.Random rng, out float yTop)
+    {
+        yTop = y0;
+        Material mat = set[rng.Next(set.Length)];
+        if (mat == null) return false;
+
+        // Keep the texture's proportions; shrink to fit the wall if needed.
+        Texture tex = mat.mainTexture;
+        float aspect = tex != null && tex.height > 0 ? (float)tex.width / tex.height : 1f;
+        float w = height * aspect;
+        if (w > maxWidth) { height *= maxWidth / w; w = maxWidth; }
+
+        float centre = Mathf.Lerp(w * 0.5f, faceLength - w * 0.5f, (float)rng.NextDouble());
+        Vector3 p0 = a + along * (centre - w * 0.5f) + normal * offset;
+        Vector3 p1 = p0 + along * w;
+        Get(decals, mat).Decal(p0, p1, y0, y0 + height, rng.NextDouble() < 0.5);
+        yTop = y0 + height;
+        return true;
+    }
+
     private static void Emit(Transform root, string objectName, MeshBuilder mb, Material material, Color tint,
-        bool collider = true, bool alwaysTint = false)
+        bool collider = true, bool alwaysTint = false, bool shadows = true)
     {
         if (mb.IsEmpty) return;
 
@@ -196,7 +303,9 @@ public class LevelBuilder : MonoBehaviour
 
         Mesh mesh = mb.ToMesh("Generated " + objectName);
         go.AddComponent<MeshFilter>().sharedMesh = mesh;
-        go.AddComponent<MeshRenderer>().sharedMaterial = material != null ? material : FallbackMaterial;
+        var renderer = go.AddComponent<MeshRenderer>();
+        renderer.sharedMaterial = material != null ? material : FallbackMaterial;
+        if (!shadows) renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         if (collider) go.AddComponent<MeshCollider>().sharedMesh = mesh;
         if (material == null || alwaysTint) go.AddComponent<PlaceholderTint>().Color = tint;
     }
@@ -304,6 +413,24 @@ public class LevelBuilder : MonoBehaviour
             Quad(a + Vector3.up * y0, a + Vector3.up * y1, b + Vector3.up * y1, b + Vector3.up * y0,
                 new Vector2(u0, y0 / cs), new Vector2(u0, y1 / cs),
                 new Vector2(u0 + len, y1 / cs), new Vector2(u0 + len, y0 / cs));
+        }
+
+        /// <summary>Textured wall face: UVs in meters / textureSize, shifted by offset, optionally mirrored.</summary>
+        public void Wall(Vector3 a, Vector3 b, float y0, float y1, Vector2 offset, float textureSize, bool mirror)
+        {
+            float len = Vector3.Distance(a, b) / textureSize;
+            float u0 = offset.x, u1 = offset.x + (mirror ? -len : len);
+            float v0 = y0 / textureSize + offset.y, v1 = y1 / textureSize + offset.y;
+            Quad(a + Vector3.up * y0, a + Vector3.up * y1, b + Vector3.up * y1, b + Vector3.up * y0,
+                new Vector2(u0, v0), new Vector2(u0, v1), new Vector2(u1, v1), new Vector2(u1, v0));
+        }
+
+        /// <summary>A decal quad from p0 to p1 (along the wall), y0..y1, showing the whole texture once.</summary>
+        public void Decal(Vector3 p0, Vector3 p1, float y0, float y1, bool flip)
+        {
+            float u0 = flip ? 1f : 0f, u1 = flip ? 0f : 1f;
+            Quad(p0 + Vector3.up * y0, p0 + Vector3.up * y1, p1 + Vector3.up * y1, p1 + Vector3.up * y0,
+                new Vector2(u0, 0f), new Vector2(u0, 1f), new Vector2(u1, 1f), new Vector2(u1, 0f));
         }
 
         private void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector2 ua, Vector2 ub, Vector2 uc, Vector2 ud)

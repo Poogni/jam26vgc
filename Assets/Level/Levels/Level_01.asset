@@ -514,6 +514,7 @@ MonoBehaviour:
   coveredHeight: 3.2
   groundMaterial: {fileID: 2100000, guid: d6377b73c4729b04f8b8040e116333f1, type: 2}
   wallMaterial: {fileID: 0}
+  wallStyle: {fileID: 11400000, guid: 4f0717b7e39fbdd438689ff62c45fb23, type: 2}
   objectiveName: the hidden courtyard
   objectiveFoundText: You found {0}. Now find your way back to where you started.
     Trust your map.

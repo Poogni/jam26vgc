@@ -112,6 +112,7 @@ public class LevelDataEditor : Editor
         EditorGUILayout.LabelField("Materials", EditorStyles.boldLabel);
         EditorGUILayout.PropertyField(serializedObject.FindProperty("groundMaterial"));
         EditorGUILayout.PropertyField(serializedObject.FindProperty("wallMaterial"));
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("wallStyle"));
 
         EditorGUILayout.Space(4);
         EditorGUILayout.LabelField("Objective", EditorStyles.boldLabel);

@@ -48,6 +48,8 @@ public class LevelData : ScriptableObject
     [SerializeField] private Material groundMaterial;
     [Tooltip("Optional. Leave empty to use grey-box materials tinted with each tile's color.")]
     [SerializeField] private Material wallMaterial;
+    [Tooltip("Optional. Textured walls (one variant per cell) plus bottom/mid/top decals. Overrides Wall Material.")]
+    [SerializeField] private WallStyle wallStyle;
 
     [Tooltip("What the objective is called in messages.")]
     [SerializeField] private string objectiveName = "the hidden courtyard";
@@ -69,6 +71,8 @@ public class LevelData : ScriptableObject
     public float CoveredHeight => coveredHeight;
     public Material GroundMaterial => groundMaterial;
     public Material WallMaterial => wallMaterial;
+    public WallStyle WallStyle => wallStyle;
+    public int Seed => seed;
 
     public bool InBounds(Vector2Int c) => c.x >= 0 && c.y >= 0 && c.x < width && c.y < height;
 
